@@ -18,7 +18,7 @@ Apply the new migrations to any project that previously received only the initia
 
 ## GitHub and Vercel
 
-1. Review and commit the source to `3763869-ctrl/Fundraising-accounting`, then push to the intended branch. No push has been performed by this setup.
+1. The application source is committed and uploaded to the `main` branch of `3763869-ctrl/Fundraising-accounting`. Git push and the remote commit were verified. Connect this repository and branch when importing into Vercel.
 2. Connect the repository to a Vercel project: Next.js framework, repository root, `npm run build`, Node 24. A custom domain is optional; use the assigned Vercel hostname initially.
 3. Configure both Supabase public variables on the relevant Vercel environment and redeploy. Public variables are read at build time. Keep preview and production Supabase projects separate.
 4. Set Supabase's Site URL to the final Vercel origin and test confirmation there. The Vercel deployment can serve sample mode without Supabase; live signup/records require the connection and migrations.
