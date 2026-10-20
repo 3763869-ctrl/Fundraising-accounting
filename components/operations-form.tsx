@@ -195,7 +195,7 @@ export function OperationsForm({
         {kind === "gateway_accounts" && (
           <>
             {choices("provider", "Provider", [
-              "Solo",
+              "Sola",
               "Matbeya",
               "OJZ",
               "Other",

@@ -1558,6 +1558,13 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                         : "Configuration only. External processing, device connectivity, email delivery, and retries are not active."}
                     </p>
                   )}
+                  {page === "gateways" && (
+                    <p>
+                      <a href="/settings/sola">
+                        Sola secure card-entry setup →
+                      </a>
+                    </p>
+                  )}
                   {page === "jobs" && (
                     <p className="notice">
                       Failed-payment rule executions are logged here. These
@@ -1712,8 +1719,8 @@ function PlannedPage({ page, data }: { page: string; data: WorkspaceData }) {
   const cards = gateway
     ? [
         [
-          "Solo",
-          "Requested card processor. Exact provider API documentation and merchant authorization are needed.",
+          "Sola (formerly Cardknox)",
+          "Live keys are stored separately in deployment settings. Secure-field sandbox setup is available; live processing remains disabled.",
         ],
         [
           "Matbeya / OJZ",
