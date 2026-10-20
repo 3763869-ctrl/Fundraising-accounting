@@ -24,6 +24,7 @@ export function SolaLivePayment({
 }) {
   const card = useRef<HTMLInputElement>(null),
     cvv = useRef<HTMLInputElement>(null);
+  const fieldError = useRef<HTMLLabelElement>(null);
   const pending = useRef(false),
     alive = useRef(true);
   const [sdk, setSdk] = useState(false),
@@ -38,6 +39,7 @@ export function SolaLivePayment({
   const clearTokens = () => {
     if (card.current) card.current.value = "";
     if (cvv.current) cvv.current.value = "";
+    if (fieldError.current) fieldError.current.textContent = "";
   };
   const check = async (requestKey: string) => {
     setStage("checking");
@@ -221,7 +223,7 @@ export function SolaLivePayment({
             onReady={init}
             onError={() => setSdkError(true)}
           />
-          <form onSubmit={charge} autoComplete="off">
+          <form onSubmit={charge} method="post" autoComplete="off">
             <fieldset
               disabled={stage !== "entry" || pending.current}
               style={{ border: 0, padding: 0 }}
@@ -302,10 +304,19 @@ export function SolaLivePayment({
               />
               <input
                 type="hidden"
+                name="xCardNum"
                 data-ifields-id="card-number-token"
                 ref={card}
               />
-              <input type="hidden" data-ifields-id="cvv-token" ref={cvv} />
+              <input
+                type="hidden"
+                name="xCVV"
+                data-ifields-id="cvv-token"
+                ref={cvv}
+              />
+              <div hidden>
+                <label ref={fieldError} data-ifields-id="card-data-error" />
+              </div>
               <label>
                 <input
                   type="checkbox"
@@ -334,6 +345,11 @@ export function SolaLivePayment({
       {stage === "submitting" && (
         <p role="status">
           Submitting once. Do not refresh or start another payment.
+        </p>
+      )}
+      {key && (
+        <p className="muted">
+          Payment attempt / Sola invoice: <code>{key}</code>
         </p>
       )}
       {result && (

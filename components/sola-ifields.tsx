@@ -23,6 +23,7 @@ export function SolaIFields({ sandboxKey }: { sandboxKey: string }) {
   >("loading");
   const card = useRef<HTMLInputElement>(null),
     cvv = useRef<HTMLInputElement>(null);
+  const fieldError = useRef<HTMLLabelElement>(null);
   const alive = useRef(true),
     pending = useRef(false);
   useEffect(() => {
@@ -30,6 +31,7 @@ export function SolaIFields({ sandboxKey }: { sandboxKey: string }) {
     return () => {
       alive.current = false;
       discardSetupTokens(card.current, cvv.current);
+      if (fieldError.current) fieldError.current.textContent = "";
     };
   }, []);
   const ready = () => {
@@ -51,6 +53,7 @@ export function SolaIFields({ sandboxKey }: { sandboxKey: string }) {
     setState("busy");
     const finish = (success: boolean) => {
       const complete = discardSetupTokens(card.current, cvv.current);
+      if (fieldError.current) fieldError.current.textContent = "";
       pending.current = false;
       if (alive.current) setState(success && complete ? "success" : "error");
     };
@@ -77,7 +80,11 @@ export function SolaIFields({ sandboxKey }: { sandboxKey: string }) {
         onReady={ready}
         onError={() => setState("error")}
       />
-      <form onSubmit={(e) => e.preventDefault()} autoComplete="off">
+      <form
+        onSubmit={(e) => e.preventDefault()}
+        method="post"
+        autoComplete="off"
+      >
         <label htmlFor="sola-card-frame">Card number — Sola hosted field</label>
         <iframe
           id="sola-card-frame"
@@ -110,8 +117,21 @@ export function SolaIFields({ sandboxKey }: { sandboxKey: string }) {
             borderRadius: 6,
           }}
         />
-        <input ref={card} type="hidden" data-ifields-id="card-number-token" />
-        <input ref={cvv} type="hidden" data-ifields-id="cvv-token" />
+        <input
+          ref={card}
+          name="xCardNum"
+          type="hidden"
+          data-ifields-id="card-number-token"
+        />
+        <input
+          ref={cvv}
+          name="xCVV"
+          type="hidden"
+          data-ifields-id="cvv-token"
+        />
+        <div hidden>
+          <label ref={fieldError} data-ifields-id="card-data-error" />
+        </div>
         <p role="status" aria-live="polite">
           {state === "loading"
             ? "Loading Sola secure fields…"
