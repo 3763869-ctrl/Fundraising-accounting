@@ -10,7 +10,9 @@ import {
   X,
 } from "lucide-react";
 
-export type Column = { key: string; label: string };
+import { Modal } from "./record-form";
+
+export type Column = { key: string; label: string; defaultHidden?: boolean };
 export type TableRow = {
   id: string;
   values: Record<string, string | number>;
@@ -73,6 +75,7 @@ export function DataTable({
   onOpen,
   action,
   storageKey,
+  rowActions,
 }: {
   columns: Column[];
   rows: TableRow[];
@@ -80,10 +83,13 @@ export function DataTable({
   onOpen?: (id: string) => void;
   action?: React.ReactNode;
   storageKey: string;
+  rowActions?: (id: string) => React.ReactNode;
 }) {
   const [search, setSearch] = useState(""),
     [filter, setFilter] = useState("all"),
-    [visible, setVisible] = useState(columns.map((c) => c.key)),
+    [visible, setVisible] = useState(
+      columns.filter((c) => !c.defaultHidden).map((c) => c.key),
+    ),
     [selected, setSelected] = useState<string[]>([]),
     [page, setPage] = useState(1),
     [size, setSize] = useState(10),
@@ -91,10 +97,28 @@ export function DataTable({
     [viewName, setViewName] = useState(""),
     [error, setError] = useState(""),
     [sort, setSort] = useState({ key: columns[0]?.key ?? "", direction: 1 });
+  const [editingColumns, setEditingColumns] = useState(false);
+  const [draftColumns, setDraftColumns] = useState<string[]>([]);
+  const [columnSearch, setColumnSearch] = useState("");
+  const [dragged, setDragged] = useState<string | null>(null);
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) ?? "[]");
       if (Array.isArray(saved)) setViews(saved);
+      const order = JSON.parse(
+        localStorage.getItem(`${storageKey}-columns`) ?? "null",
+      );
+      if (Array.isArray(order)) {
+        const valid = [
+          ...new Set(
+            order.filter(
+              (key): key is string =>
+                typeof key === "string" && columns.some((c) => c.key === key),
+            ),
+          ),
+        ];
+        if (valid.length) setVisible(valid);
+      }
     } catch {
       /* Optional local view storage. */
     }
@@ -137,7 +161,9 @@ export function DataTable({
   const pages = Math.max(1, Math.ceil(filtered.length / size)),
     current = Math.min(page, pages),
     chunk = filtered.slice((current - 1) * size, current * size),
-    display = columns.filter((c) => visible.includes(c.key));
+    display = visible
+      .map((key) => columns.find((c) => c.key === key))
+      .filter((c): c is Column => Boolean(c));
   const selection = rows.filter((r) => selected.includes(r.id));
   const save = () => {
     if (!viewName.trim()) return;
@@ -184,32 +210,16 @@ export function DataTable({
               ))}
             </select>
           )}
-          <details className="popover">
-            <summary className="icon-button">
-              <SlidersHorizontal size={16} />
-              Columns
-            </summary>
-            <div className="popover-body">
-              {columns.map((c) => (
-                <label className="check-label" key={c.key}>
-                  <input
-                    type="checkbox"
-                    checked={visible.includes(c.key)}
-                    onChange={(e) =>
-                      setVisible(
-                        e.target.checked
-                          ? [...visible, c.key]
-                          : visible.length > 1
-                            ? visible.filter((x) => x !== c.key)
-                            : visible,
-                      )
-                    }
-                  />
-                  {c.label}
-                </label>
-              ))}
-            </div>
-          </details>
+          <button
+            className="icon-button"
+            onClick={() => {
+              setDraftColumns(visible);
+              setColumnSearch("");
+              setEditingColumns(true);
+            }}
+          >
+            <SlidersHorizontal size={16} /> Columns
+          </button>
           <details className="popover">
             <summary className="icon-button">
               <Bookmark size={16} />
@@ -342,6 +352,7 @@ export function DataTable({
                 </th>
               ))}
               {onOpen && <th>Details</th>}
+              {rowActions && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -369,6 +380,13 @@ export function DataTable({
                       >
                         {r.values[c.key]}
                       </span>
+                    ) : i === 0 && onOpen ? (
+                      <button
+                        className="text-button"
+                        onClick={() => onOpen(r.id)}
+                      >
+                        <bdi>{r.values[c.key] ?? "—"}</bdi>
+                      </button>
                     ) : (
                       <bdi>{r.values[c.key] ?? "—"}</bdi>
                     )}
@@ -384,6 +402,7 @@ export function DataTable({
                     </button>
                   </td>
                 )}
+                {rowActions && <td>{rowActions(r.id)}</td>}
               </tr>
             ))}
           </tbody>
@@ -396,6 +415,134 @@ export function DataTable({
           </div>
         )}
       </div>
+      {editingColumns && (
+        <Modal title="Edit Columns" onClose={() => setEditingColumns(false)}>
+          <div className="column-editor">
+            <section>
+              <input
+                aria-label="Search columns"
+                placeholder="Search columns"
+                value={columnSearch}
+                onChange={(e) => setColumnSearch(e.target.value)}
+              />
+              <h3>All results ({columns.length} Columns)</h3>
+              <div className="column-list">
+                {columns
+                  .filter((c) =>
+                    c.label.toLowerCase().includes(columnSearch.toLowerCase()),
+                  )
+                  .map((c) => (
+                    <label className="check-label" key={c.key}>
+                      <input
+                        type="checkbox"
+                        checked={draftColumns.includes(c.key)}
+                        onChange={(e) =>
+                          setDraftColumns(
+                            e.target.checked
+                              ? [...draftColumns, c.key]
+                              : draftColumns.filter((key) => key !== c.key),
+                          )
+                        }
+                      />
+                      {c.label}
+                    </label>
+                  ))}
+              </div>
+            </section>
+            <section>
+              <h3>Selected Columns ({draftColumns.length})</h3>
+              <div className="column-list">
+                {draftColumns.map((key, index) => (
+                  <div
+                    className="column-order-row"
+                    key={key}
+                    draggable
+                    onDragStart={() => setDragged(key)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (!dragged || dragged === key) return;
+                      const next = draftColumns.filter((k) => k !== dragged);
+                      next.splice(next.indexOf(key), 0, dragged);
+                      setDraftColumns(next);
+                      setDragged(null);
+                    }}
+                  >
+                    <span>⠿ {columns.find((c) => c.key === key)?.label}</span>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={`Move ${columns.find((c) => c.key === key)?.label} up`}
+                      disabled={index === 0}
+                      onClick={() => {
+                        const next = [...draftColumns];
+                        [next[index - 1], next[index]] = [
+                          next[index],
+                          next[index - 1],
+                        ];
+                        setDraftColumns(next);
+                      }}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={`Move ${columns.find((c) => c.key === key)?.label} down`}
+                      disabled={index === draftColumns.length - 1}
+                      onClick={() => {
+                        const next = [...draftColumns];
+                        [next[index + 1], next[index]] = [
+                          next[index],
+                          next[index + 1],
+                        ];
+                        setDraftColumns(next);
+                      }}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={`Remove ${columns.find((c) => c.key === key)?.label} column`}
+                      onClick={() =>
+                        setDraftColumns(draftColumns.filter((k) => k !== key))
+                      }
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+          <div className="form-footer">
+            <button
+              className="secondary"
+              onClick={() => setEditingColumns(false)}
+            >
+              Cancel
+            </button>
+            <button
+              disabled={!draftColumns.length}
+              onClick={() => {
+                setVisible(draftColumns);
+                try {
+                  localStorage.setItem(
+                    `${storageKey}-columns`,
+                    JSON.stringify(draftColumns),
+                  );
+                } catch {
+                  setError("Column layout could not be saved in this browser.");
+                }
+                setEditingColumns(false);
+              }}
+            >
+              Apply
+            </button>
+          </div>
+        </Modal>
+      )}
       <footer className="table-footer">
         <span>
           {filtered.length

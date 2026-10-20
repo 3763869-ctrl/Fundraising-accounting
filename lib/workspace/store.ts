@@ -63,11 +63,17 @@ function client() {
 }
 export async function loadWorkspace(demo: boolean): Promise<WorkspaceData> {
   if (demo) {
-    if(!navigator.locks)throw new Error('Sample mode requires a browser supporting Web Locks and IndexedDB.');
-    return navigator.locks.request(databaseName,async()=>{
-      const existing=await demoRead();
-      const data=existing?applyCommand(existing,{type:'bootstrap',values:{}}):sampleData();
-      await demoWrite(data);return data;
+    if (!navigator.locks)
+      throw new Error(
+        "Sample mode requires a browser supporting Web Locks and IndexedDB.",
+      );
+    return navigator.locks.request(databaseName, async () => {
+      const existing = await demoRead();
+      const data = existing
+        ? applyCommand(existing, { type: "bootstrap", values: {} })
+        : sampleData();
+      await demoWrite(data);
+      return data;
     });
   }
   const db = client();
@@ -216,6 +222,20 @@ export async function runCommand(
       result = await db
         .from(command.table!)
         .insert({ ...v, organization_id: org });
+      break;
+    case "donation_payment":
+      result = await db.rpc("record_donation_payment", { org, details: v });
+      break;
+    case "donation_edit":
+      result = await db.rpc("edit_donation_record", {
+        org,
+        kind: v.kind,
+        record_id: v.record_id,
+        attributes: v.attributes,
+      });
+      break;
+    case "pledge_void":
+      result = await db.rpc("void_pledge", { org, pledge: v.pledge });
       break;
     case "payment":
       result = await db.rpc("record_payment", {

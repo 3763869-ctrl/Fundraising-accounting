@@ -43,7 +43,9 @@ export function Reports({ data }: { data: WorkspaceData }) {
     ];
     const ps = t.pledges.filter(
       (p) =>
-        between(p.pledged_on) && (basis !== "open" || balance(data, p) > 0),
+        !p.voided_at &&
+        between(p.pledged_on) &&
+        (basis !== "open" || balance(data, p) > 0),
     );
     rows = ps.map((p) => ({
       id: p.id,
@@ -113,20 +115,22 @@ export function Reports({ data }: { data: WorkspaceData }) {
           },
         };
       });
-    t.pledges.forEach((p) => {
-      const available = balance(data, p) - scheduled(data, p.id);
-      if (available > 0 && between(p.due_date))
-        rows.push({
-          id: p.id,
-          values: {
-            donor: name("donors", p.donor_id),
-            date: String(p.due_date),
-            amount: currency(available),
-            source: "Unscheduled pledge balance",
-            status: String(p.due_date) < today() ? "Overdue" : "Expected",
-          },
-        });
-    });
+    t.pledges
+      .filter((p) => !p.voided_at)
+      .forEach((p) => {
+        const available = balance(data, p) - scheduled(data, p.id);
+        if (available > 0 && between(p.due_date))
+          rows.push({
+            id: p.id,
+            values: {
+              donor: name("donors", p.donor_id),
+              date: String(p.due_date),
+              amount: currency(available),
+              source: "Unscheduled pledge balance",
+              status: String(p.due_date) < today() ? "Overdue" : "Expected",
+            },
+          });
+      });
   } else {
     columns = [
       {
@@ -156,10 +160,12 @@ export function Reports({ data }: { data: WorkspaceData }) {
     rows = groups.map((r) => {
       const ps = t.pledges.filter(
         (p) =>
+          !p.voided_at &&
           (group === "expected"
             ? String(p.expected_payment_type ?? "unspecified") === r.id
             : p[group === "campaign" ? "campaign_id" : "fundraiser_id"] ===
-              r.id) && between(p.pledged_on),
+              r.id) &&
+          between(p.pledged_on),
       );
       return {
         id: r.id,

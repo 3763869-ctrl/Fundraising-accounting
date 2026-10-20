@@ -2061,3 +2061,85 @@ button:disabled {
     gap: 6px;
   }
 }
+.column-editor {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  padding: 24px;
+}
+.column-list {
+  max-height: 390px;
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+  padding: 5px;
+}
+.column-list .check-label {
+  padding: 12px;
+  border-bottom: 1px solid var(--line, #ddd);
+}
+.column-order-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: #f4f2e4;
+  border-radius: 7px;
+  padding: 10px;
+}
+.column-order-row span {
+  flex: 1;
+  cursor: grab;
+}
+.donation-section {
+  border: 1px solid #dce2dd;
+  border-radius: 10px;
+  padding: 20px;
+  margin: 16px 0;
+}
+.pledge-allocation-row {
+  display: grid;
+  grid-template-columns: auto 1fr 120px;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #eee;
+}
+.row-menu .popover-body {
+  right: 0;
+  min-width: 210px;
+  z-index: 20;
+}
+.row-menu .popover-body button {
+  text-align: left;
+  width: 100%;
+  margin: 3px 0;
+}
+@media (max-width: 650px) {
+  .column-editor {
+    grid-template-columns: 1fr;
+  }
+  .column-list {
+    max-height: 240px;
+  }
+}
+.data-panel:has(.row-menu) th:last-child,
+.data-panel:has(.row-menu) td:last-child {
+  position: sticky;
+  right: 0;
+  background: #fff;
+  z-index: 2;
+}
+.row-menu .popover-body {
+  width: 240px;
+  max-height: calc(100vh - 24px);
+  white-space: normal;
+}
+.pledge-allocation-row > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 650px) {
+  .pledge-allocation-row {
+    grid-template-columns: auto minmax(0, 1fr) 90px;
+  }
+}

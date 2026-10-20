@@ -186,7 +186,7 @@ export function RecordForm({
         required: true,
         value: today(),
       },
-      { key: "due_date", label: "Due date", type: "date", required: true },
+      { key: "due_date", label: "Due date (optional)", type: "date" },
       select("fundraiser_id", "Fundraiser", t.fundraisers, false),
       select("sponsorship_id", "Sponsorship", t.sponsorships, false),
       select("event_id", "Event", t.events, false),
@@ -195,7 +195,7 @@ export function RecordForm({
         label: "Donor-visible description",
         type: "textarea",
       },
-      choice("receipt_requested", "Receipt requested", ["yes", "no"]),
+      choice("receipt_requested", "Receipt requested", ["yes", "no"], "yes"),
     ],
     funds: named([
       choice("restricted", "Fund restriction", ["unrestricted", "restricted"]),
@@ -492,6 +492,7 @@ export function RecordForm({
           values.custom_fields = custom;
         }
         if (kind === "pledges") {
+          values.due_date = values.due_date || values.pledged_on;
           values.amount_minor = cents(values.amount);
           delete values.amount;
           values.receipt_requested = values.receipt_requested === "yes";

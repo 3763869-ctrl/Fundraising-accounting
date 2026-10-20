@@ -34,7 +34,9 @@ export function Overview({
     cutoff = new Date(`${today()}T12:00:00Z`);
   cutoff.setUTCDate(cutoff.getUTCDate() - Number(range));
   const start = range === "all" ? "0000" : cutoff.toISOString().slice(0, 10);
-  const pledges = t.pledges.filter((p) => String(p.pledged_on) >= start),
+  const pledges = t.pledges.filter(
+      (p) => !p.voided_at && String(p.pledged_on) >= start,
+    ),
     payments = t.payments.filter(
       (p) => p.status === "processed" && String(p.paid_on) >= start,
     );

@@ -57,10 +57,15 @@ import {
   donorTotals,
   currency,
   today,
+  type Row,
   type WorkspaceData,
   type Command,
 } from "@/lib/workspace/domain";
 import { pageTitles, tableView } from "@/lib/workspace/views";
+import { RowMenu } from "./row-menu";
+import { DonationForm } from "./donation-form";
+import { DonationEdit } from "./donation-edit";
+import { PledgeInvoice } from "./pledge-invoice";
 import { DataTable } from "./data-table";
 import { Modal, RecordForm } from "./record-form";
 import { DonorForm } from "./donor-form";
@@ -258,7 +263,8 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
     [notice, setNotice] = useState(""),
     [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false),
-    [paymentTab, setPaymentTab] = useState("all");
+    [paymentTab, setPaymentTab] = useState("all"),
+    [pledgeTab, setPledgeTab] = useState("open");
   useEffect(() => {
     const sync = () => {
       const value = new URLSearchParams(window.location.search).get("page");
@@ -352,6 +358,10 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       data.role,
     );
   const table = tableView(page, data);
+  if (page === "pledges" && pledgeTab === "open")
+    table.rows = table.rows.filter(
+      (r) => !["Paid", "Void"].includes(r.status ?? ""),
+    );
   if (page === "payments" && paymentTab !== "all")
     table.rows = table.rows.filter((r) =>
       paymentTab === "undeposited"
@@ -380,6 +390,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
   const detailContent = () => {
     if (!detail) return null;
     const detailTable: Record<string, string> = {
+      invoice: "pledges",
       bank: "bank_transactions",
       transactions: "journal_entries",
       checks: "bill_payments",
@@ -782,6 +793,8 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
         </div>
       );
     }
+    if (detail.kind === "invoice")
+      return <PledgeInvoice data={data} row={row} demo={demo} />;
     if (detail.kind === "payments") {
       const donor = t.donors.find((d) => d.id === row.donor_id),
         allocations = t.payment_allocations.filter(
@@ -791,6 +804,34 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       return (
         <div className="detail-body">
           <h3>{String(donor?.name)}</h3>
+          <p>Payment ID: {row.id}</p>
+          <p>{String(row.description ?? "")}</p>
+          <p>
+            Campaign:{" "}
+            {String(
+              t.campaigns.find((c) => c.id === row.campaign_id)?.name ??
+                "Unassigned",
+            )}{" "}
+            · Fundraiser:{" "}
+            {String(
+              t.fundraisers.find((f) => f.id === row.fundraiser_id)?.name ??
+                "Unassigned",
+            )}
+          </p>
+          {financeWritable && (
+            <button
+              className="secondary"
+              onClick={() => {
+                setDetail(null);
+                setForm({
+                  kind: "donation_edit",
+                  preset: { ...row, record_kind: "payments" },
+                });
+              }}
+            >
+              Edit payment details
+            </button>
+          )}
           {stats([
             ["Payment", Number(row.amount_minor)],
             [
@@ -1016,6 +1057,65 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       return (
         <div className="detail-body">
           <h3>{String(t.donors.find((d) => d.id === row.donor_id)?.name)}</h3>
+          <p>
+            Pledge ID: {row.id} · Date: {String(row.pledged_on)}
+          </p>
+          <p>
+            Status:{" "}
+            {row.voided_at
+              ? "Void"
+              : balance(data, row) === 0
+                ? "Paid"
+                : scheduled(data, row.id) > 0
+                  ? "On plan"
+                  : "Open"}{" "}
+            · Fundraiser:{" "}
+            {String(
+              t.fundraisers.find((f) => f.id === row.fundraiser_id)?.name ??
+                "Unassigned",
+            )}
+          </p>
+          <p>
+            Sponsorship:{" "}
+            {String(
+              t.sponsorships.find((f) => f.id === row.sponsorship_id)?.name ??
+                "None",
+            )}{" "}
+            · Event:{" "}
+            {String(
+              t.events.find((f) => f.id === row.event_id)?.name ?? "None",
+            )}
+          </p>
+          <div className="actions">
+            {financeWritable && !row.voided_at && (
+              <button
+                className="secondary"
+                onClick={() => {
+                  setDetail(null);
+                  setForm({
+                    kind: "donation_edit",
+                    preset: { ...row, record_kind: "pledges" },
+                  });
+                }}
+              >
+                Edit pledge
+              </button>
+            )}
+            <button
+              className="secondary"
+              onClick={() => setDetail({ kind: "invoice", id: row.id })}
+            >
+              Print pledge statement
+            </button>
+            <button
+              className="text-button"
+              onClick={() =>
+                setDetail({ kind: "donors", id: String(row.donor_id) })
+              }
+            >
+              Open donor
+            </button>
+          </div>
           <p>
             {String(t.campaigns.find((c) => c.id === row.campaign_id)?.name)} ·
             Due {String(row.due_date)}
@@ -1413,21 +1513,52 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                       </button>
                     </>
                   )}
-                  {((addable.includes(page) && writable) ||
-                    (["schedules", "payments"].includes(page) &&
-                      financeWritable)) && (
-                    <button onClick={add}>
-                      <Plus size={16} />
-                      Add new{" "}
-                      {page === "donor_lists"
-                        ? "list"
-                        : page === "schedules"
-                          ? "plan"
-                          : page === "donor_accounts"
-                            ? "account"
-                            : page.replace(/s$/, "")}
-                    </button>
-                  )}
+                  {["pledges", "payments"].includes(page) &&
+                    financeWritable && (
+                      <details className="popover">
+                        <summary className="button">
+                          <Plus size={16} /> New donation
+                        </summary>
+                        <div className="popover-body">
+                          <button
+                            onClick={(e) => {
+                              e.currentTarget
+                                .closest("details")
+                                ?.removeAttribute("open");
+                              setForm({ kind: "pledges" });
+                            }}
+                          >
+                            New pledge
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.currentTarget
+                                .closest("details")
+                                ?.removeAttribute("open");
+                              setForm({ kind: "payment" });
+                            }}
+                          >
+                            New payment
+                          </button>
+                        </div>
+                      </details>
+                    )}
+                  {!["pledges", "payments"].includes(page) &&
+                    ((addable.includes(page) && writable) ||
+                      (["schedules", "payments"].includes(page) &&
+                        financeWritable)) && (
+                      <button onClick={add}>
+                        <Plus size={16} />
+                        Add new{" "}
+                        {page === "donor_lists"
+                          ? "list"
+                          : page === "schedules"
+                            ? "plan"
+                            : page === "donor_accounts"
+                              ? "account"
+                              : page.replace(/s$/, "")}
+                      </button>
+                    )}
                 </div>
               </div>
               {adminPages.includes(page) &&
@@ -1614,6 +1745,21 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                       templates require later setup.
                     </p>
                   )}
+                  {page === "pledges" && (
+                    <div className="tabs" aria-label="Pledge views">
+                      {["open", "all"].map((tab) => (
+                        <button
+                          key={tab}
+                          className={pledgeTab === tab ? "active" : ""}
+                          onClick={() => setPledgeTab(tab)}
+                        >
+                          {tab === "open"
+                            ? "Open pledges"
+                            : "All pledges (including paid & void)"}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <DataTable
                     key={`${page}-${paymentTab}`}
                     columns={table.columns}
@@ -1621,6 +1767,120 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                     name={pageTitles[page]}
                     onOpen={(id) => setDetail({ kind: page, id })}
                     storageKey={`${data.organization.id}-${page}`}
+                    rowActions={
+                      ["pledges", "payments"].includes(page)
+                        ? (id) => {
+                            const r = t[page].find((r) => r.id === id)!;
+                            return (
+                              <RowMenu id={id}>
+                                <button
+                                  className="text-button"
+                                  onClick={() => setDetail({ kind: page, id })}
+                                >
+                                  View details
+                                </button>
+                                {financeWritable && !r.voided_at && (
+                                  <button
+                                    className="text-button"
+                                    onClick={() =>
+                                      setForm({
+                                        kind: "donation_edit",
+                                        preset: { ...r, record_kind: page },
+                                      })
+                                    }
+                                  >
+                                    Edit
+                                  </button>
+                                )}
+                                <button
+                                  className="text-button"
+                                  onClick={() =>
+                                    setDetail({
+                                      kind: "donors",
+                                      id: String(r.donor_id),
+                                    })
+                                  }
+                                >
+                                  Open Donor
+                                </button>
+                                {page === "pledges" && (
+                                  <>
+                                    <button
+                                      className="text-button"
+                                      disabled
+                                      title="Email delivery is not configured"
+                                    >
+                                      Send Invoice · setup required
+                                    </button>
+                                    <button
+                                      className="text-button"
+                                      onClick={() =>
+                                        setDetail({ kind: "invoice", id })
+                                      }
+                                    >
+                                      Print Invoice / Statement
+                                    </button>
+                                    <button
+                                      className="text-button"
+                                      disabled
+                                      title="Email/SMS delivery is not configured"
+                                    >
+                                      Send Reminder · setup required
+                                    </button>
+                                    {financeWritable &&
+                                      balance(data, r) > 0 && (
+                                        <>
+                                          <button
+                                            className="text-button"
+                                            onClick={() =>
+                                              setForm({
+                                                kind: "payment",
+                                                preset: {
+                                                  donor_id: r.donor_id,
+                                                },
+                                              })
+                                            }
+                                          >
+                                            Make a payment
+                                          </button>
+                                          <button
+                                            className="text-button"
+                                            onClick={() =>
+                                              setForm({
+                                                kind: "schedule",
+                                                preset: { pledge: r.id },
+                                              })
+                                            }
+                                          >
+                                            Make a payment schedule
+                                          </button>
+                                        </>
+                                      )}
+                                    {financeWritable && !r.voided_at && (
+                                      <button
+                                        className="text-button"
+                                        onClick={() => {
+                                          if (
+                                            window.confirm(
+                                              "Void this pledge? Payments, active plans and recognized accounting entries must be resolved first. History is retained.",
+                                            )
+                                          )
+                                            act({
+                                              type: "pledge_void",
+                                              values: { pledge: id },
+                                            });
+                                        }}
+                                      >
+                                        Void Pledge
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                              </RowMenu>
+                            );
+                          }
+                        : undefined
+                    }
                   />
                   {page === "users" && (
                     <details className="panel" style={{ marginTop: 24 }}>
@@ -1656,21 +1916,39 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       {form && (
         <Modal
           title={
-            form.kind === "donors"
-              ? "Add New Donor"
-              : form.kind === "donor_edit"
-                ? "Edit donor"
-                : form.kind === "organization_update"
-                  ? "Edit organization"
-                  : form.kind === "batch"
-                    ? "Batch payment entry"
-                    : form.kind === "allocate"
-                      ? "Allocate donor credit"
-                      : `Add ${form.kind === "payment" ? "payment" : form.kind === "schedule" ? "payment plan" : form.kind.replaceAll("_", " ").replace(/s$/, "")}`
+            form.kind === "donation_edit"
+              ? "Edit donation"
+              : form.kind === "donors"
+                ? "Add New Donor"
+                : form.kind === "donor_edit"
+                  ? "Edit donor"
+                  : form.kind === "organization_update"
+                    ? "Edit organization"
+                    : form.kind === "batch"
+                      ? "Batch payment entry"
+                      : form.kind === "allocate"
+                        ? "Allocate donor credit"
+                        : `Add ${form.kind === "payment" ? "payment" : form.kind === "schedule" ? "payment plan" : form.kind.replaceAll("_", " ").replace(/s$/, "")}`
           }
           onClose={() => setForm(null)}
         >
-          {["donors", "donor_edit"].includes(form.kind) ? (
+          {form.kind === "payment" && !form.preset?.installment ? (
+            <DonationForm
+              data={data}
+              preset={form.preset}
+              demo={demo}
+              onSave={save}
+              onClose={() => setForm(null)}
+            />
+          ) : form.kind === "donation_edit" ? (
+            <DonationEdit
+              data={data}
+              kind={String(form.preset?.record_kind)}
+              row={form.preset as Row}
+              onSave={save}
+              onClose={() => setForm(null)}
+            />
+          ) : ["donors", "donor_edit"].includes(form.kind) ? (
             <DonorForm
               data={data}
               preset={form.preset}
@@ -1707,9 +1985,11 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       {detail && (
         <Modal
           title={
-            detail.kind === "receipts"
-              ? "Payment acknowledgment"
-              : `${pageTitles[detail.kind]} · Details`
+            detail.kind === "invoice"
+              ? "Pledge statement"
+              : detail.kind === "receipts"
+                ? "Payment acknowledgment"
+                : `${pageTitles[detail.kind]} · Details`
           }
           onClose={() => setDetail(null)}
         >

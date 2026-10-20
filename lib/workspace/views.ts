@@ -58,6 +58,102 @@ export function tableView(
   data: WorkspaceData,
 ): { columns: Column[]; rows: TableRow[] } {
   const t = data.tables;
+  const donorColumns = (p: Row) => {
+    const d = t.donors.find((d) => d.id === p.donor_id);
+    const phones = Array.isArray(d?.phone_contacts)
+      ? (d.phone_contacts as { label?: string; value?: string }[])
+      : [];
+    return {
+      id: p.id,
+      description: String(p.description ?? ""),
+      sponsorship: name("sponsorships", p.sponsorship_id),
+      sponsorship_date: String(p.sponsorship_date ?? "—"),
+      event: name("events", p.event_id),
+      created: String(p.created_at ?? "—"),
+      updated: String(p.updated_at ?? p.created_at ?? "—"),
+      donor_email: String(d?.email ?? "—"),
+      donor_phone: String(
+        phones.find((x) => x.label?.toLowerCase() === "home")?.value ??
+          (Array.isArray(d?.phones) ? d.phones[0] : "—") ??
+          "—",
+      ),
+      donor_cell: String(
+        phones.find((x) => x.label?.toLowerCase() === "cell")?.value ?? "—",
+      ),
+      donor_notes: String(d?.notes ?? ""),
+      donor_address: (Array.isArray(d?.addresses)
+        ? (d.addresses as Record<string, unknown>[])
+        : []
+      )
+        .map((a) =>
+          String(
+            a.address ||
+              [a.number, a.line1, a.line2, a.city, a.state, a.zip, a.country]
+                .filter(Boolean)
+                .join(", "),
+          ),
+        )
+        .filter(Boolean)
+        .join("; "),
+      donor_email_receipts:
+        Array.isArray(d?.email_contacts) &&
+        d.email_contacts.some((x: { consent?: boolean }) => x.consent)
+          ? "Yes"
+          : "No consent recorded",
+      receipt_language: String(d?.receipt_language ?? "en"),
+      currency: "USD",
+      home_amount: currency(p.amount_minor),
+      source_type: String(p.source_type ?? "App"),
+      source_ref: String(p.reference ?? "—"),
+      note: String(p.note ?? ""),
+      tags: Array.isArray(d?.tags) ? d.tags.join(", ") : "",
+      import_id: String(p.import_id ?? "—"),
+      source_pledge: String(p.source_pledge_id ?? "—"),
+      schedule_id: String(
+        t.schedules.find((x) => x.pledge_id === p.id)?.id ?? "—",
+      ),
+      scheduled_date: String(
+        t.installments
+          .filter(
+            (i) =>
+              !i.payment_id &&
+              t.schedules.some(
+                (x) => x.id === i.schedule_id && x.pledge_id === p.id,
+              ),
+          )
+          .sort((a, b) =>
+            String(a.due_date).localeCompare(String(b.due_date)),
+          )[0]?.due_date ?? "—",
+      ),
+    };
+  };
+  const extraColumns = {
+    id: "ID",
+    type: "Type",
+    description: "Description",
+    sponsorship: "Sponsorship",
+    sponsorship_date: "Sponsorship Date",
+    event: "Event",
+    created: "Created Time",
+    updated: "Updated Time",
+    donor_email: "Donor Email",
+    donor_phone: "Donor Phone",
+    donor_cell: "Donor Cell",
+    donor_notes: "Donor Notes",
+    donor_address: "Donor Address Line 1",
+    donor_email_receipts: "Donor Send Email Receipts",
+    receipt_language: "Receipt Language",
+    currency: "Currency Code",
+    home_amount: "Home Currency Amount",
+    source_type: "Source Type",
+    source_ref: "Source Ref",
+    note: "Note",
+    tags: "Donor Tags",
+    import_id: "Import ID",
+    source_pledge: "Source Pledge ID",
+    schedule_id: "Schedule ID",
+    scheduled_date: "Scheduled Date",
+  };
   const name = (table: string, id: unknown) =>
     String(t[table].find((r) => r.id === id)?.name ?? "—");
   let keys: Record<string, string> = {},
@@ -421,18 +517,22 @@ export function tableView(
     });
   } else if (page === "pledges") {
     keys = {
+      id: "Pledge ID",
       donor: "Donor",
       date: "Pledge date",
       amount: "Pledged",
       campaign: "Campaign",
       fundraiser: "Fundraiser",
       paid: "Paid",
-      scheduled: "Scheduled",
+      scheduled: "On Plan",
       open: "Open balance",
       due: "Due date",
       status: "Status",
     };
+    keys = { ...keys, ...extraColumns, id: "Pledge ID", type: "Type" };
     rows = view(t.pledges, (p) => ({
+      ...donorColumns(p),
+      type: "Pledge",
       donor: name("donors", p.donor_id),
       date: String(p.pledged_on),
       amount: currency(p.amount_minor),
@@ -442,8 +542,9 @@ export function tableView(
       scheduled: currency(scheduled(data, p.id)),
       open: currency(balance(data, p)),
       due: String(p.due_date),
-      status:
-        balance(data, p) === 0
+      status: p.voided_at
+        ? "Void"
+        : balance(data, p) === 0
           ? "Paid"
           : String(p.due_date) < today()
             ? "Overdue"
@@ -463,7 +564,22 @@ export function tableView(
       deposit: "Deposit status",
       status: "Status",
     };
+    keys = {
+      ...keys,
+      campaign: "Campaign",
+      fundraiser: "Fundraiser",
+      ...extraColumns,
+      id: "Payment ID",
+      collector: "Collector",
+      processed: "Processed Status",
+    };
     rows = view(t.payments, (p) => ({
+      ...donorColumns(p),
+      type: "Payment",
+      campaign: name("campaigns", p.campaign_id),
+      fundraiser: name("fundraisers", p.fundraiser_id),
+      collector: String(p.collector ?? ""),
+      processed: String(p.status),
       donor: name("donors", p.donor_id),
       date: String(p.paid_on),
       amount: currency(p.amount_minor),
@@ -504,7 +620,7 @@ export function tableView(
             : page === "fundraisers"
               ? "fundraiser_id"
               : "sponsorship_id",
-        pledges = t.pledges.filter((p) => p[key] === r.id);
+        pledges = t.pledges.filter((p) => p[key] === r.id && !p.voided_at);
       return {
         name: String(r.name),
         fund: name("funds", r.fund_id),
@@ -676,7 +792,27 @@ export function tableView(
     });
   }
   return {
-    columns: Object.entries(keys).map(([key, label]) => ({ key, label })),
+    columns: Object.entries(keys).map(([key, label]) => ({
+      key,
+      label,
+      defaultHidden:
+        ["pledges", "payments"].includes(page) &&
+        ![
+          "id",
+          "donor",
+          "date",
+          "type",
+          "amount",
+          "status",
+          "paid",
+          "scheduled",
+          "open",
+          "campaign",
+          "fundraiser",
+          "description",
+          ...(page === "payments" ? ["method", "reference", "credit"] : []),
+        ].includes(key),
+    })),
     rows,
   };
 }

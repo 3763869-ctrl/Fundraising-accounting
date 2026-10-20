@@ -82,9 +82,8 @@ test("connected sample workflows, persistent allocations, Hebrew receipts, and e
   expect((await attachment).suggestedFilename()).toBe("sample-note.txt");
   await page.getByRole("button", { name: "Close dialog", exact: true }).click();
   await page.getByRole("link", { name: "Pledges", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Add new pledge", exact: true })
-    .click();
+  await page.getByText("New donation", { exact: true }).click();
+  await page.getByRole("button", { name: "New pledge", exact: true }).click();
   dialog = page.getByRole("dialog");
   await dialog
     .getByLabel("Donor", { exact: false })
@@ -100,24 +99,25 @@ test("connected sample workflows, persistent allocations, Hebrew receipts, and e
   await dialog.getByRole("button", { name: "Save record" }).click();
   await expect(dialog).not.toBeVisible();
   await page.getByRole("link", { name: "Payments", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Add new payment", exact: true })
-    .click();
+  await page.getByText("New donation", { exact: true }).click();
+  await page.getByRole("button", { name: "New payment", exact: true }).click();
   dialog = page.getByRole("dialog");
   await dialog
     .getByLabel("Donor", { exact: false })
     .first()
     .selectOption({ label: "Test donor workflow" });
-  await dialog.getByLabel("Payment amount").fill("120.01");
+  await dialog
+    .getByLabel("Payment amount (USD)", { exact: true })
+    .fill("120.01");
+  await dialog
+    .getByLabel("Goes to / Campaign", { exact: false })
+    .selectOption({ label: "Annual community appeal" });
   await dialog.getByLabel("Method", { exact: false }).selectOption("check");
   await dialog.getByLabel("Status", { exact: false }).selectOption("processed");
   await dialog
-    .getByRole("spinbutton", {
-      name: "Allocate to Annual community appeal",
-      exact: true,
-    })
-    .fill("100.01");
-  await dialog.getByRole("button", { name: "Save record" }).click();
+    .getByRole("button", { name: "Auto select: exact match, then oldest" })
+    .click();
+  await dialog.getByRole("button", { name: "Save payment" }).click();
   await expect(dialog).not.toBeVisible();
   await page
     .getByRole("textbox", { name: "Search Payments", exact: true })
@@ -242,10 +242,10 @@ test("saved views, selection, column customization, and mobile navigation", asyn
   await expect(page.getByText("1 selected", { exact: false })).toBeVisible();
   await page.getByText("Columns", { exact: true }).click();
   await page.getByRole("checkbox", { name: "Email", exact: true }).uncheck();
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
   await expect(
     page.getByRole("columnheader", { name: "Email", exact: false }),
   ).not.toBeVisible();
-  await page.getByText("Columns", { exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await page
     .getByRole("button", { name: "Open navigation", exact: true })

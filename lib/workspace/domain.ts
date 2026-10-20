@@ -54,6 +54,9 @@ export type Command = {
   type:
     | "insert"
     | "payment"
+    | "donation_payment"
+    | "donation_edit"
+    | "pledge_void"
     | "batch"
     | "allocate"
     | "schedule"
@@ -135,7 +138,9 @@ export function scheduled(data: WorkspaceData, pledge: string) {
   );
 }
 export function balance(data: WorkspaceData, pledge: Row) {
-  return Number(pledge.amount_minor) - paid(data, pledge.id);
+  return pledge.voided_at
+    ? 0
+    : Number(pledge.amount_minor) - paid(data, pledge.id);
 }
 export function credit(data: WorkspaceData, payment: Row) {
   return payment.status === "processed"
@@ -149,7 +154,9 @@ export function credit(data: WorkspaceData, payment: Row) {
     : 0;
 }
 export function donorTotals(data: WorkspaceData, donor: string) {
-  const pledges = data.tables.pledges.filter((p) => p.donor_id === donor);
+  const pledges = data.tables.pledges.filter(
+    (p) => p.donor_id === donor && !p.voided_at,
+  );
   const payments = data.tables.payments.filter(
     (p) => p.donor_id === donor && p.status === "processed",
   );
@@ -295,6 +302,8 @@ export function applyCommand(
         "bank_transfer",
         "external_card",
         "charity_card",
+        "zelle",
+        "other",
       ].includes(String(values.method))
     )
       throw new Error("Invalid payment status or method.");
@@ -649,6 +658,107 @@ export function applyCommand(
       );
       break;
     }
+    case "donation_payment": {
+      find("campaigns", v.campaign_id);
+      for (const [key, table] of [
+        ["fundraiser_id", "fundraisers"],
+        ["sponsorship_id", "sponsorships"],
+        ["event_id", "events"],
+      ])
+        if (v[key]) find(table, v[key]);
+      const existing = tables.payments.find(
+        (p) => p.idempotency_key === v.idempotency_key,
+      );
+      if (existing) {
+        payment(v);
+        break;
+      }
+      if (
+        !v.installment &&
+        Array.isArray(v.allocations) &&
+        !v.allocations.length &&
+        !v.credit_confirmed &&
+        tables.pledges.some(
+          (p) => p.donor_id === v.donor_id && balance(data, p) > 0,
+        )
+      )
+        throw new Error(
+          "Confirm leaving this donation unapplied to open pledges",
+        );
+      payment(v);
+      break;
+    }
+    case "donation_edit": {
+      if (!["pledges", "payments"].includes(String(v.kind)))
+        throw new Error("Invalid record kind");
+      const row = find(String(v.kind), v.record_id),
+        a = v.attributes as Record<string, unknown>;
+      if (v.kind === "pledges") {
+        if (row.voided_at) throw new Error("Voided pledges cannot be edited");
+        const changed =
+          Number(a.amount_minor) !== Number(row.amount_minor) ||
+          a.campaign_id !== row.campaign_id ||
+          a.pledged_on !== row.pledged_on;
+        if (
+          changed &&
+          (tables.payment_allocations.some((x) => x.pledge_id === row.id) ||
+            tables.schedules.some(
+              (x) =>
+                x.pledge_id === row.id &&
+                ["active", "paused"].includes(String(x.status)),
+            ) ||
+            tables.pledge_recognitions.some((x) => x.pledge_id === row.id))
+        )
+          throw new Error(
+            "Amount, campaign and pledge date are locked after financial activity",
+          );
+        find("campaigns", a.campaign_id);
+        if (
+          !Number.isSafeInteger(a.amount_minor) ||
+          Number(a.amount_minor) <= 0
+        )
+          throw new Error("Invalid pledge amount");
+        dateValue(a.pledged_on);
+        dateValue(a.due_date);
+        for (const key of [
+          "amount_minor",
+          "campaign_id",
+          "pledged_on",
+          "due_date",
+          "receipt_requested",
+        ])
+          row[key] = a[key];
+      }
+      for (const [key, table] of [
+        ["fundraiser_id", "fundraisers"],
+        ["sponsorship_id", "sponsorships"],
+        ["event_id", "events"],
+      ]) {
+        if (a[key]) find(table, a[key]);
+        row[key] = a[key] || null;
+      }
+      row.description = String(a.description ?? "");
+      if (v.kind === "payments") row.collector = String(a.collector ?? "");
+      row.updated_at = new Date().toISOString();
+      audit(row.donor_id, "edited", `${v.kind} record updated: ${row.id}`);
+      break;
+    }
+    case "pledge_void": {
+      const p = find("pledges", v.pledge);
+      if (
+        tables.payment_allocations.some((x) => x.pledge_id === p.id) ||
+        tables.schedules.some(
+          (x) =>
+            x.pledge_id === p.id &&
+            ["active", "paused"].includes(String(x.status)),
+        ) ||
+        tables.pledge_recognitions.some((x) => x.pledge_id === p.id)
+      )
+        throw new Error("Cannot void a pledge with financial activity");
+      p.voided_at = new Date().toISOString();
+      audit(p.donor_id, "voided", `Pledge voided: ${p.id}`);
+      break;
+    }
     case "payment":
       payment(v);
       break;
@@ -746,6 +856,17 @@ export function applyCommand(
           number: tables.receipts.length + 1,
           language: d.receipt_language ?? "en",
           snapshot: {
+            description:
+              p.description ||
+              tables.payment_allocations
+                .filter((a) => a.payment_id === p.id)
+                .map(
+                  (a) =>
+                    tables.pledges.find((pl) => pl.id === a.pledge_id)
+                      ?.description,
+                )
+                .filter(Boolean)
+                .join("; "),
             template:
               tables.document_templates
                 .filter((t) => t.language === (d.receipt_language ?? "en"))

@@ -24,6 +24,9 @@ export function Receipt({ receipt, demo }: { receipt: Row; demo: boolean }) {
         ) : (
           <p className="muted">Tax ID not configured</p>
         )}
+        {Boolean(s.description) && (
+          <p className="preserve-lines">{String(s.description)}</p>
+        )}
         <hr />
         <h2>{hebrew ? "אישור קבלת תרומה" : "Payment acknowledgment"}</h2>
         <div className="row">
@@ -43,6 +46,9 @@ export function Receipt({ receipt, demo }: { receipt: Row; demo: boolean }) {
           <p>
             {hebrew ? "אסמכתא" : "Reference"}: {String(s.reference)}
           </p>
+        )}
+        {Boolean(s.description) && (
+          <p className="preserve-lines">{String(s.description)}</p>
         )}
         <hr />
         <p>
