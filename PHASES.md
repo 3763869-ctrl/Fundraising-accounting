@@ -43,7 +43,7 @@ Original branding/design. DonorFuse was supplied as a functional reference; its 
 
 Supabase account/project, migrations, Auth/email configuration, live Storage validation, Vercel account authorization/deployment and production smoke tests remain required. A local/test success is not a hosted deployment.
 
-Solo's exact API/merchant identity and sandbox authorization are needed. Matbeya/OJZ/other charity-card capabilities are pending the owner's research. Chase requires a chosen bank connector and consent or an agreed CSV mapping. No provider is marked connected, and no actual charge is simulated in production.
+Sola (formerly Cardknox) is identified, with the owner-operated one-time card flow documented in LIVE_PAYMENTS.md. Merchant activation and actual provider validation remain subject to the setup described there. Matbeya/OJZ/other charity-card capabilities are pending the owner's research. Chase requires a chosen bank connector and consent or an agreed CSV mapping. No provider is marked connected, and no actual charge is simulated in production.
 
 Public campaign donation links, provider-hosted tokenization, signed/idempotent provider webhooks, automatic installments/retries, refunds/voids and subledger reversals, processing-fee rules, outbound receipts/reminders/summaries, real device connectivity, background worker scheduling, invoice/statement template editors, and expired tokenized-method reporting remain integration/product milestones. Automatic fund-restriction releases need the organization's accounting policy. Backups, recovery, retention/scanning of uploads, high-volume server-side reporting and production monitoring also need operational validation.
 
@@ -52,3 +52,7 @@ Public campaign donation links, provider-hosted tokenization, signed/idempotent 
 `/demo` uses a separate synthetic IndexedDB database and Web Locks for atomic cross-tab edits. Reset affects only local sample records. It never seeds Supabase. `/dashboard` validates the Supabase user and loads organization-scoped data; RLS/functions enforce live permissions. The retained historical Python prototype is not used by the web app or ledger.
 
 Tests apply real migrations to embedded PostgreSQL with Auth/Storage fixtures, check financial rules and permissions, and exercise browser workflows, persistence, Hebrew print output, XLSX, attachments and mobile navigation. Hosted Supabase email/Storage and provider-specific behavior still require live validation. No GitHub push or Vercel deployment has been performed.
+
+## Owner-operated Sola card-entry addition
+
+A server-authorized, one-time live card-entry flow is implemented at `/payments/card`, with hosted iFields, persisted single-submit attempts, server-only result finalization, exact approval amounts and uncertain-outcome lockout. See LIVE_PAYMENTS.md for activation prerequisites and current limitations. It does not implement 3DS challenge completion, refunds, recurring processing, provider webhooks or settlement automation. No real provider transaction has been submitted or claimed as tested.

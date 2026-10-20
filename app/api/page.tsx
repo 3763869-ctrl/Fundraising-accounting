@@ -47,9 +47,11 @@ Content-Type: application/json
         </p>
         <h2>Provider connections</h2>
         <p>
-          Solo, charity-card, Chase, outbound messaging, and provider webhook
-          adapters need external setup and documented provider contracts. No
-          unverified webhook endpoint processes payments.
+          Owner-operated Sola card entry is separate at /payments/card and uses
+          a verified owner session, merchant binding and server-only
+          credentials. This v1 manual-record API never charges a card.
+          Charity-card, Chase, outbound messaging and provider webhook adapters
+          remain pending.
         </p>
       </section>
     </main>

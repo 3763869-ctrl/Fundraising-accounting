@@ -32,3 +32,21 @@ test("signed-out Sola setup exposes no card entry or provider requests", async (
   ).toHaveCount(0);
   expect(providerRequests).toEqual([]);
 });
+
+test("live card entry and merchant binding reject signed-out access", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/payments/card");
+  await expect(page).toHaveURL(/\/login(?:\?|$)/);
+  await expect(page.locator("iframe")).toHaveCount(0);
+  const status = await request.get(
+    "/api/sola/payments?request_key=00000000-0000-0000-0000-000000000001",
+  );
+  expect(status.status()).toBe(403);
+  const bind = await request.post("/api/sola/merchant", {
+    headers: { origin: "https://cedar-olive.vercel.app" },
+    data: { organization: "00000000-0000-0000-0000-000000000001" },
+  });
+  expect(bind.status()).toBe(403);
+});

@@ -7,7 +7,7 @@ import { PGlite } from "@electric-sql/pglite";
 test("verified invitations, last-owner protection, automations, and templates", async (t) => {
   const db = new PGlite();
   try {
-    await db.exec(`create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;grant usage on schema public,auth to anon,authenticated;grant execute on function auth.uid() to anon,authenticated;
+    await db.exec(`create role service_role;create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;grant usage on schema public,auth to anon,authenticated;grant execute on function auth.uid() to anon,authenticated;
    insert into auth.users values('00000000-0000-0000-0000-000000000001','owner@example.test',now()),('00000000-0000-0000-0000-000000000002','staff@example.test',now()),('00000000-0000-0000-0000-000000000003','other@example.test',now());`);
     const dir = new URL("../supabase/migrations/", import.meta.url);
     for (const file of (await readdir(dir))
@@ -146,6 +146,205 @@ test("verified invitations, last-owner protection, automations, and templates", 
         saved = (await db.query("select * from donors where id=$1", [donor]))
           .rows[0];
         assert.equal(saved.phone_contacts[0].consent, false);
+      },
+    );
+    await t.test(
+      "Sola attempts are durable, single-submit, server-finalized and block uncertain retries",
+      async () => {
+        const cardDonor = (
+          await db.query(
+            "insert into donors(organization_id,name) values($1,'Synthetic card donor') returning id",
+            [org],
+          )
+        ).rows[0].id;
+        const key = randomUUID();
+        const prepare = async (k = key, amount = 123) =>
+          (
+            await db.query("select prepare_sola_payment($1,$2,$3,$4) result", [
+              org,
+              cardDonor,
+              amount,
+              k,
+            ])
+          ).rows[0].result;
+        const first = await prepare();
+        assert.equal(first.send, true);
+        assert.equal((await prepare()).send, false);
+        await assert.rejects(prepare(key, 124));
+        await assert.rejects(
+          db.query("select finish_sola_payment($1,'approved','FAKE')", [
+            first.attempt,
+          ]),
+        );
+        await assert.rejects(
+          db.query(
+            "select resolve_pending_payment($1,'processed',current_date)",
+            [first.payment],
+          ),
+        );
+        await db.exec("reset role;set role service_role");
+        await db.query("select finish_sola_payment($1,'unknown',null)", [
+          first.attempt,
+        ]);
+        await actor(1);
+        await assert.rejects(prepare(randomUUID()));
+        assert.equal(
+          (
+            await db.query("select status from payments where id=$1", [
+              first.payment,
+            ])
+          ).rows[0].status,
+          "pending",
+        );
+        const secondDonor = (
+          await db.query(
+            "insert into donors(organization_id,name) values($1,'Synthetic approved donor') returning id",
+            [org],
+          )
+        ).rows[0].id;
+        const second = (
+          await db.query("select prepare_sola_payment($1,$2,123,$3) result", [
+            org,
+            secondDonor,
+            randomUUID(),
+          ])
+        ).rows[0].result;
+        await db.exec("reset role;set role service_role");
+        await db.query(
+          "select finish_sola_payment($1,'approved','SYNTHETIC123')",
+          [second.attempt],
+        );
+        await db.query(
+          "select finish_sola_payment($1,'approved','SYNTHETIC123')",
+          [second.attempt],
+        );
+        await actor(1);
+        assert.equal(
+          (
+            await db.query("select status from payments where id=$1", [
+              second.payment,
+            ])
+          ).rows[0].status,
+          "processed",
+        );
+        const posted = await db.query(
+          "select count(*)::int n from journal_entries where event_key=$1",
+          ["payment:" + second.payment],
+        );
+        assert.equal(posted.rows[0].n, 1);
+        await actor(3);
+        assert.equal(
+          (await db.query("select * from sola_payment_attempts")).rows.length,
+          0,
+        );
+        await assert.rejects(
+          db.query("select prepare_sola_payment($1,$2,123,$3)", [
+            org,
+            secondDonor,
+            randomUUID(),
+          ]),
+        );
+        await actor(1);
+      },
+    );
+    await t.test(
+      "Sola merchant binding cannot be claimed by a browser or reassigned to another organization",
+      async () => {
+        await assert.rejects(
+          db.query("select bind_sola_merchant($1,auth.uid())", [org]),
+        );
+        await db.exec("reset role;set role service_role");
+        assert.equal(
+          (
+            await db.query("select bind_sola_merchant($1,$2) id", [
+              org,
+              "00000000-0000-0000-0000-000000000001",
+            ])
+          ).rows[0].id,
+          org,
+        );
+        await actor(3);
+        const otherOrg = (
+          await db.query("select create_organization('Separate merchant') id")
+        ).rows[0].id;
+        await db.exec("reset role;set role service_role");
+        await assert.rejects(
+          db.query("select bind_sola_merchant($1,$2)", [
+            otherOrg,
+            "00000000-0000-0000-0000-000000000003",
+          ]),
+        );
+        await actor(1);
+      },
+    );
+    await t.test(
+      "approved Sola money remains recorded as credit when a pledge changes during processing",
+      async () => {
+        const d = (
+          await db.query(
+            "insert into donors(organization_id,name) values($1,'Synthetic allocation race donor') returning id",
+            [org],
+          )
+        ).rows[0].id;
+        const c = (
+          await db.query(
+            "insert into campaigns(organization_id,name) values($1,'Synthetic allocation race campaign') returning id",
+            [org],
+          )
+        ).rows[0].id;
+        const p = (
+          await db.query(
+            "insert into pledges(organization_id,donor_id,campaign_id,amount_minor,due_date) values($1,$2,$3,100,current_date+30) returning id",
+            [org, d, c],
+          )
+        ).rows[0].id;
+        const allocations = JSON.stringify([
+          { pledge_id: p, amount_minor: 100 },
+        ]);
+        const attempt = (
+          await db.query(
+            "select prepare_sola_payment($1,$2,123,$3,$4::jsonb) result",
+            [org, d, randomUUID(), allocations],
+          )
+        ).rows[0].result;
+        await db.query(
+          "select record_payment($1,$2,100,current_date,'cash','processed','', $3,$4::jsonb)",
+          [org, d, randomUUID(), allocations],
+        );
+        await db.exec("reset role;set role service_role");
+        const result = (
+          await db.query(
+            "select finish_sola_payment($1,'approved','SYNTHETIC-RACE') result",
+            [attempt.attempt],
+          )
+        ).rows[0].result;
+        assert.equal(result.state, "approved");
+        assert.equal(result.allocation_review, true);
+        await actor(1);
+        assert.equal(
+          (
+            await db.query("select status from payments where id=$1", [
+              attempt.payment,
+            ])
+          ).rows[0].status,
+          "processed",
+        );
+        assert.equal(
+          (
+            await db.query(
+              "select * from payment_allocations where payment_id=$1",
+              [attempt.payment],
+            )
+          ).rows.length,
+          0,
+        );
+        const lines = (
+          await db.query(
+            "select sum(l.debit_minor)::int debit,sum(l.credit_minor)::int credit from journal_lines l join journal_entries e on e.id=l.entry_id where e.event_key=$1",
+            ["payment:" + attempt.payment],
+          )
+        ).rows[0];
+        assert.deepEqual(lines, { debit: 123, credit: 123 });
       },
     );
     await t.test(

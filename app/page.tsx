@@ -104,7 +104,7 @@ export default function Home() {
         </section>
       </div>
       <footer className="footer">
-        Foundation in development · Solo, charity-card, and Chase integrations
+        Foundation in development · Sola, charity-card, and Chase integrations
         pending.
       </footer>
     </main>

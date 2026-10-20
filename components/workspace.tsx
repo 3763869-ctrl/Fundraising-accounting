@@ -1573,6 +1573,13 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                     </p>
                   )}
 
+                  {page === "payments" && !demo && (
+                    <p>
+                      <a href="/payments/card">
+                        Charge a card securely with Sola →
+                      </a>
+                    </p>
+                  )}
                   {page === "payments" && (
                     <div
                       className="view-tabs"

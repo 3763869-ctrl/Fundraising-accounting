@@ -44,8 +44,12 @@ export default async function SolaSetup() {
         <p className="eyebrow">Sola · formerly Cardknox</p>
         <h1>Secure card-entry setup</h1>
         <p className="notice">
-          Live processing is disabled. This page cannot charge a card, save a
-          payment method, or create a recurring schedule.
+          This setup page does not charge a card, save a payment method, or
+          create a recurring schedule. Live entry requires a separately
+          configured merchant connection.
+        </p>
+        <p>
+          <Link href="/payments/card">Open live card entry →</Link>
         </p>
         {enabled ? (
           <SolaIFields sandboxKey={process.env.SOLA_SANDBOX_IFIELDS_KEY!} />
@@ -79,7 +83,8 @@ export default async function SolaSetup() {
             </ol>
             <p>
               Production deployments always keep this sandbox check disabled.
-              The existing live keys remain unused.
+              Live card entry is configured separately and is never part of this
+              sandbox check.
             </p>
           </>
         )}
