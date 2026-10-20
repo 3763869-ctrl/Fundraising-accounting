@@ -23,13 +23,30 @@ export async function authenticate(form: FormData) {
     redirect("/login?message=password");
   const client = await supabase();
   if (form.get("mode") === "signup") {
-    const { error } = await client.auth.signUp({ email, password });
+    const { error } = await client.auth.signUp({
+      email, password,
+      options: { emailRedirectTo: "https://cedar-olive.vercel.app/auth/confirm" },
+    });
     if (error) redirect("/login?message=auth");
     redirect("/login?message=confirmation");
   }
   const { error } = await client.auth.signInWithPassword({ email, password });
   if (error) redirect("/login?message=auth");
   redirect("/dashboard");
+}
+
+export async function resendConfirmation(form: FormData) {
+  if (!configured()) redirect("/login?message=configuration");
+  const email = String(form.get("email") ?? "").trim();
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    redirect("/login?message=invalid");
+  const client = await supabase();
+  const { error } = await client.auth.resend({
+    type: "signup", email,
+    options: { emailRedirectTo: "https://cedar-olive.vercel.app/auth/confirm" },
+  });
+  if (error) redirect("/login?message=resend");
+  redirect("/login?message=confirmation");
 }
 
 export async function signOut() {

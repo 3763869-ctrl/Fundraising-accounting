@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { authenticate } from "@/app/actions";
+import { authenticate, resendConfirmation } from "@/app/actions";
 import { configured } from "@/lib/supabase/server";
 
 const messages: Record<string, string> = {
+  resend: "Could not request another confirmation email. Wait a minute and try again. If this continues, check the project email settings.",
   configuration: "Connect the Supabase project before signing in.",
   invalid: "Enter a valid email address and password.",
   password: "Use a password between 12 and 128 characters.",
@@ -75,6 +76,14 @@ export default async function Login({
             {signup ? "Create account" : "Sign in"}
           </button>
         </form>
+        <details style={{ marginTop: 20 }}>
+          <summary>Confirmation link expired? Resend confirmation</summary>
+          <p className="muted">Open the newest email in the same browser where you requested it. If your account is already confirmed, sign in above.</p>
+          <form action={resendConfirmation}>
+            <label>Email address<input type="email" name="email" autoComplete="email" required maxLength={254} /></label>
+            <button disabled={!ready}>Resend confirmation email</button>
+          </form>
+        </details>
         <p style={{ marginTop: 20 }}>
           {signup ? "Already have an account?" : "New here?"}{" "}
           <Link href={signup ? "/login" : "/login?mode=signup"}>
