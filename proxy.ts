@@ -24,5 +24,14 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/setup/:path*", "/login", "/auth/:path*", "/join/:path*"],
+  matcher: [
+    "/dashboard/:path*",
+    "/setup/:path*",
+    "/login",
+    "/auth/:path*",
+    "/join/:path*",
+    "/payments/:path*",
+    "/settings/:path*",
+    "/api/sola/:path*",
+  ],
 };
