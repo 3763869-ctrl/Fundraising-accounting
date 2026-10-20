@@ -63,6 +63,7 @@ import {
 import { pageTitles, tableView } from "@/lib/workspace/views";
 import { DataTable } from "./data-table";
 import { Modal, RecordForm } from "./record-form";
+import { DonorForm } from "./donor-form";
 import { Overview } from "./overview";
 import { Reports } from "./reports";
 import { Calendar } from "./calendar";
@@ -1641,19 +1642,28 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       {form && (
         <Modal
           title={
-            form.kind === "donor_edit"
-              ? "Edit donor"
-              : form.kind === "organization_update"
-                ? "Edit organization"
-                : form.kind === "batch"
-                  ? "Batch payment entry"
-                  : form.kind === "allocate"
-                    ? "Allocate donor credit"
-                    : `Add ${form.kind === "payment" ? "payment" : form.kind === "schedule" ? "payment plan" : form.kind.replaceAll("_", " ").replace(/s$/, "")}`
+            form.kind === "donors"
+              ? "Add New Donor"
+              : form.kind === "donor_edit"
+                ? "Edit donor"
+                : form.kind === "organization_update"
+                  ? "Edit organization"
+                  : form.kind === "batch"
+                    ? "Batch payment entry"
+                    : form.kind === "allocate"
+                      ? "Allocate donor credit"
+                      : `Add ${form.kind === "payment" ? "payment" : form.kind === "schedule" ? "payment plan" : form.kind.replaceAll("_", " ").replace(/s$/, "")}`
           }
           onClose={() => setForm(null)}
         >
-          {operationsForms.includes(form.kind) ? (
+          {["donors", "donor_edit"].includes(form.kind) ? (
+            <DonorForm
+              data={data}
+              preset={form.preset}
+              onSave={save}
+              onClose={() => setForm(null)}
+            />
+          ) : operationsForms.includes(form.kind) ? (
             <OperationsForm
               kind={form.kind}
               data={data}

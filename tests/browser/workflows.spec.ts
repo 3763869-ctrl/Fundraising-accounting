@@ -22,17 +22,19 @@ test("connected sample workflows, persistent allocations, Hebrew receipts, and e
     .getByRole("button", { name: "Add new donor", exact: true })
     .click();
   let dialog = page.getByRole("dialog");
-  await dialog
-    .getByLabel("Name", { exact: false })
-    .first()
-    .fill("Test donor workflow");
-  await dialog.getByLabel("Hebrew name").fill("תורם לדוגמה");
+  await dialog.getByLabel("First name", { exact: true }).fill("Test");
+  await dialog.getByLabel("Last name", { exact: true }).fill("donor workflow");
   await dialog.getByLabel("Primary email").fill("workflow@example.test");
+  await dialog.getByRole("button", { name: "Settings", exact: true }).click();
+  await dialog.getByLabel("Hebrew name").fill("תורם לדוגמה");
   await dialog.getByLabel("Receipt language").selectOption("he");
+  await dialog
+    .getByRole("button", { name: "Notes, tags & attachments", exact: true })
+    .click();
   await dialog
     .getByLabel("Notes", { exact: true })
     .fill("Created in the browser test.");
-  await dialog.getByRole("button", { name: "Save record" }).click();
+  await dialog.getByRole("button", { name: "Save New Donor" }).click();
   await expect(dialog).not.toBeVisible();
   await page
     .getByRole("textbox", { name: "Search Donors", exact: true })
@@ -51,11 +53,15 @@ test("connected sample workflows, persistent allocations, Hebrew receipts, and e
   await page.getByRole("button", { name: "Edit donor", exact: true }).click();
   await page
     .getByRole("dialog")
+    .getByRole("button", { name: "Notes, tags & attachments", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
     .getByLabel("Notes", { exact: true })
     .fill("Updated and persisted contact notes.");
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: "Save record" })
+    .getByRole("button", { name: "Save Donor" })
     .click();
   await page.getByRole("button", { name: "View →", exact: true }).click();
   await expect(
@@ -139,9 +145,10 @@ test("connected sample workflows, persistent allocations, Hebrew receipts, and e
   const file = await download;
   expect(file.suggestedFilename()).toMatch(/\.xlsx$/);
   await file.saveAs("test-results/report.xlsx");
-  const ExcelJS=(await import('exceljs')).default;
-  const workbook=new ExcelJS.Workbook();await workbook.xlsx.readFile('test-results/report.xlsx');
-  expect(typeof workbook.worksheets[0].getCell(2,5).value).toBe('number');
+  const ExcelJS = (await import("exceljs")).default;
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile("test-results/report.xlsx");
+  expect(typeof workbook.worksheets[0].getCell(2, 5).value).toBe("number");
   await page.getByRole("link", { name: "Calendar", exact: true }).click();
   await expect(page.locator(".calendar-grid")).toBeVisible();
   await expect(page.locator(".holiday").first()).toBeVisible();
@@ -372,10 +379,13 @@ test("operations settings, role safeguards, custom fields, and API authenticatio
     .getByRole("button", { name: "Add new donor", exact: true })
     .click();
   dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Name", { exact: true }).fill("Operations donor");
-  await dialog.getByLabel("Receipt language").selectOption("en");
+  await dialog.getByLabel("First name", { exact: true }).fill("Operations");
+  await dialog.getByLabel("Last name", { exact: true }).fill("donor");
+  await dialog
+    .getByRole("button", { name: "Custom Fields", exact: true })
+    .click();
   await dialog.getByLabel("Membership number").fill("42");
-  await dialog.getByRole("button", { name: "Save record" }).click();
+  await dialog.getByRole("button", { name: "Save New Donor" }).click();
   await expect(dialog).not.toBeVisible();
   await page.getByRole("link", { name: "Automations", exact: true }).click();
   await page.getByRole("button", { name: "View →", exact: true }).click();

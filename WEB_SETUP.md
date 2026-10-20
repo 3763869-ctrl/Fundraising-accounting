@@ -23,7 +23,7 @@ Apply the new migrations to any project that previously received only the initia
 3. Configure both Supabase public variables on the relevant Vercel environment and redeploy. Public variables are read at build time. Keep preview and production Supabase projects separate.
 4. Set Supabase's Site URL to the final Vercel origin and test confirmation there. The Vercel deployment can serve sample mode without Supabase; live signup/records require the connection and migrations.
 
-Vercel became reachable after the network setup changed. CLI device authorization was started; account authorization and deployment must be verified before claiming success. Temporary CLI authentication uses XDG directories under /tmp/fundraising-vercel. Never save device codes, passwords, or tokens in the repository. Do not assume authentication survives an environment snapshot. Saving environment configuration does not publish or deploy the app.
+The Vercel project `zev1/cedar-olive` is connected to this GitHub repository and deployed at https://cedar-olive.vercel.app. Public sample review is available at `/demo`; hosted Supabase setup remains pending. Temporary CLI authentication uses XDG directories under /tmp/fundraising-vercel. Never save device codes, passwords, or tokens in the repository. Do not assume authentication survives an environment snapshot. Saving environment configuration does not publish or deploy the app.
 
 ## Verification
 
@@ -43,3 +43,7 @@ Hosted validation still required: email/signup/signin/signout, organization crea
 ## Product status
 
 See [PHASES.md](PHASES.md). Connected fundraising, core accounting/reconciliation, and internal operations are implemented. Acknowledgments are print-ready but require organization-approved tax wording before use as official charitable receipts. Pledges are not automatically recognized as accounting income. Only an explicitly confirmed unconditional pledge is posted to receivables; received allocations otherwise recognize contributions. Deposits transfer assets without duplicating revenue. Solo, charity-card providers, Chase, gateway processing, live devices, public giving pages, external webhooks, scheduled collections, and outbound messaging are not connected. Failed-payment-to-task rules work inside the database. Preferences and setup metadata alone do not activate external services.
+
+## Donor form revision
+
+Apply `202610200011_donor_details.sql` in migration order before using the revised live donor form. It adds structured names, labeled phone/email contacts with explicit consent flags, and active status without replacing legacy contact arrays or display names. Primary/business addresses retain their structured components in the existing addresses column. Add/Edit Donor opens only Donor Details; optional sections remain collapsed. Consent flags record permission and do not initiate messaging. Existing attachments remain managed from saved donor details.

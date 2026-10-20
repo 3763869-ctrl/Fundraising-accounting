@@ -94,6 +94,61 @@ test("verified invitations, last-owner protection, automations, and templates", 
       )
     ).rows[0].id;
     await t.test(
+      "structured donor contacts and consent persist through authorized edits",
+      async () => {
+        const attributes = {
+          first_name: "Shalom",
+          last_name: "Review",
+          english_name: "Shalom Review",
+          alternate_names: ["שלום"],
+          phone_contacts: [
+            { label: "Cell", value: "+1 917 555 0101", consent: true },
+          ],
+          email_contacts: [
+            { label: "Primary", value: "review@example.test", consent: false },
+          ],
+          active: false,
+          addresses: [
+            {
+              type: "personal",
+              number: "123",
+              line1: "Sample Street",
+              city: "Brooklyn",
+              address: "123 Sample Street",
+            },
+          ],
+        };
+        await db.query("select update_donor($1,$2,$3::jsonb)", [
+          org,
+          donor,
+          JSON.stringify(attributes),
+        ]);
+        let saved = (
+          await db.query("select * from donors where id=$1", [donor])
+        ).rows[0];
+        for (const [key, value] of Object.entries(attributes))
+          assert.deepEqual(saved[key], value);
+        await actor(3);
+        await assert.rejects(
+          db.query("select update_donor($1,$2,$3::jsonb)", [
+            org,
+            donor,
+            JSON.stringify({ phone_contacts: [] }),
+          ]),
+        );
+        await actor(1);
+        attributes.phone_contacts[0].consent = false;
+        await db.query("select update_donor($1,$2,$3::jsonb)", [
+          org,
+          donor,
+          JSON.stringify(attributes),
+        ]);
+        saved = (await db.query("select * from donors where id=$1", [donor]))
+          .rows[0];
+        assert.equal(saved.phone_contacts[0].consent, false);
+      },
+    );
+    await t.test(
       "failed payment rules create a task once and log execution",
       async () => {
         const rule = (
