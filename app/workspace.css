@@ -2210,3 +2210,212 @@ button:disabled {
 .matbia-panel code {
   overflow-wrap: anywhere;
 }
+/* Spacious secure card entry, shared by donation and donor-file forms. */
+.card-entry-surface {
+  margin: 20px 0;
+  padding: 22px;
+  background: #f0eef5;
+  border: 1px solid #e3deed;
+  border-radius: 14px;
+  min-width: 0;
+}
+.card-entry-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+.card-brand-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.card-network {
+  display: inline-flex;
+  width: 55px;
+  height: 35px;
+  border-radius: 6px;
+  transition:
+    opacity 0.18s,
+    box-shadow 0.18s;
+}
+.card-network svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.card-network.is-muted {
+  opacity: 0.32;
+}
+.card-network.is-active {
+  box-shadow:
+    0 0 0 2px #7954c4,
+    0 3px 9px #7954c422;
+}
+.card-network-status {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: #756b85;
+  margin-top: 3px;
+}
+.card-secure-label {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #736a80;
+  padding-top: 10px;
+}
+.sola-inline-card .card-input-label,
+.sola-inline-card .card-entry-details > label,
+.sola-inline-card .card-cvv-field > label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #625a71;
+  margin: 0 0 8px;
+}
+.card-number-shell {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  background: #fff;
+  border: 1px solid #b8a4db;
+  border-radius: 9px;
+  min-height: 64px;
+  color: #8c72b8;
+  box-shadow: 0 2px 4px #30204405;
+}
+.card-number-shell:focus-within {
+  outline: 2px solid #7954c4;
+  outline-offset: 2px;
+}
+.sola-inline-card .card-number-shell .sola-hosted-field {
+  flex: 1;
+  min-width: 0;
+  height: 58px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+.card-entry-details {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.1fr) minmax(
+      115px,
+      1fr
+    );
+  align-items: end;
+  gap: 14px;
+  margin-top: 20px;
+}
+.sola-inline-card .card-entry-details input:not([type="checkbox"]) {
+  width: 100%;
+  height: 58px;
+  min-width: 0;
+  padding: 0 14px;
+  border: 1px solid #d5cede;
+  border-bottom: 2px solid #9b7dce;
+  border-radius: 7px;
+  background: #fff;
+  font-size: 18px;
+  font-weight: 400;
+  margin-top: 8px;
+  color: #292638;
+}
+.sola-inline-card .card-cvv-field .sola-hosted-field {
+  height: 58px;
+  margin: 0 0 8px;
+  border: 1px solid #d5cede;
+  border-bottom: 2px solid #9b7dce;
+  border-radius: 7px;
+}
+.sola-inline-card .card-entry-details .card-save-option {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  gap: 8px;
+  margin: 15px 0 0;
+  font-size: 13px;
+  color: #383042;
+  line-height: 1.45;
+  font-weight: 500;
+}
+.sola-inline-card .card-save-option input {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  accent-color: #7954c4;
+}
+.card-save-caption {
+  font-size: 12px;
+  color: #776d83;
+  margin: 10px 0 0;
+}
+.card-entry-surface .sample-card-field {
+  display: flex;
+  align-items: center;
+  height: 58px;
+  margin: 0;
+  border: 0;
+  font-size: 20px;
+  letter-spacing: 2px;
+}
+.card-entry-surface .sample-card-box {
+  height: 58px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  background: #fff;
+  border: 1px solid #d5cede;
+  border-bottom: 2px solid #9b7dce;
+  border-radius: 7px;
+  color: #928b9a;
+  font-size: 18px;
+}
+@media (max-width: 680px) {
+  .card-entry-surface {
+    padding: 16px;
+  }
+  .card-entry-details {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .sola-inline-card .card-entry-details .card-save-option {
+    grid-column: 1 / -1;
+    margin: 4px 0;
+  }
+  .card-secure-label {
+    display: none;
+  }
+  .sola-inline-card .card-entry-details input:not([type="checkbox"]) {
+    padding: 0 10px;
+    font-size: 16px;
+  }
+}
+.card-entry-surface {
+  container-type: inline-size;
+}
+.card-entry-surface input,
+.card-entry-surface iframe {
+  box-sizing: border-box;
+}
+.card-cvv-field {
+  min-width: 0;
+}
+@container (max-width: 340px) {
+  .card-entry-details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sola-inline-card .card-entry-details .card-save-option {
+    grid-column: auto;
+  }
+  .card-entry-heading {
+    gap: 8px;
+  }
+  .card-secure-label {
+    display: none;
+  }
+}

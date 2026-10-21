@@ -6,6 +6,12 @@ import { IFIELDS_BASE, discardSetupTokens } from "@/lib/sola/ifields";
 
 declare global {
   interface Window {
+    setIfieldStyle?: (field: string, style: Record<string, string>) => void;
+    enableAutoFormatting?: (separator: string) => void;
+    enableAutoFormat?: (separator: string) => void;
+    addIfieldKeyPressCallback?: (
+      callback: (data: { issuer?: unknown }) => void,
+    ) => void;
     setAccount?: (key: string, name: string, version: string) => void;
     getTokens?: (
       success: () => void,

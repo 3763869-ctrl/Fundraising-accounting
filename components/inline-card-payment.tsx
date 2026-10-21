@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { CardBrands } from "./card-brands";
 import { SolaLivePayment, type CardDonationContext } from "./sola-live-payment";
 type Config = {
   enabled: boolean;
@@ -59,10 +60,24 @@ export function InlineCardPayment({
           Credit-card fields appear here in the live workspace. Real card entry
           and saving are disabled in sample mode.
         </p>
-        <div className="sola-hosted-field sample-card-field">
-          Sola secure card number · •••• •••• •••• ••••
+        <div
+          className="card-entry-surface"
+          aria-label="Card entry design preview"
+        >
+          <CardBrands />
+          <p className="card-input-label">
+            Card number — secure entry in the live workspace
+          </p>
+          <div className="card-number-shell">
+            <div className="sample-card-field">•••• •••• •••• ••••</div>
+          </div>
+          <div className="card-entry-details">
+            <div className="sample-card-box">MM / YY</div>
+            <div className="sample-card-box">CVV</div>
+            <div className="sample-card-box">ZIP code</div>
+            <span>□ Save Card</span>
+          </div>
         </div>
-        <p>Expiration · CVV · ZIP code · Save card to donor file</p>
       </div>
     );
   if (error)

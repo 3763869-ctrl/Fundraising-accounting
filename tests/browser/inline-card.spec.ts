@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { build } from "esbuild";
 import path from "node:path";
+import { readFile } from "node:fs/promises";
 let bundle: string;
 const donor = "00000000-0000-0000-0000-000000000001",
   org = "00000000-0000-0000-0000-000000000002",
@@ -18,7 +19,7 @@ test.beforeAll(async () => {
     stdin: {
       resolveDir: process.cwd(),
       loader: "tsx",
-      contents: `import React from'react';import{createRoot}from'react-dom/client';import{DonationForm}from'./components/donation-form';import{DonorSavedCards}from'./components/donor-saved-cards';import{tableNames}from'./lib/workspace/domain';window.setAccount=()=>{};window.getTokens=(ok)=>{document.querySelector('[data-ifields-id="card-number-token"]').value='masked;sut_synthetic_card';document.querySelector('[data-ifields-id="cvv-token"]').value='xxx;sut_synthetic_cvv';ok();};const data={organization:{id:'${org}',name:'Synthetic organization'},role:'owner',tables:Object.fromEntries(tableNames.map((n)=>[n,[]]))};data.tables.donors=[{id:'${donor}',name:'Synthetic donor'}];data.tables.campaigns=[{id:'${campaign}',name:'Synthetic campaign'}];data.tables.pledges=[{id:'${pledge}',donor_id:'${donor}',campaign_id:'${campaign}',amount_minor:100,pledged_on:'2026-01-01',due_date:'2050-01-01'}];const profile=new URLSearchParams(location.search).has('profile');createRoot(document.getElementById('root')).render(profile?<DonorSavedCards organization='${org}' donor='${donor}' demo={false}/>:<DonationForm data={data} demo={false} onSave={async()=>{throw Error('Manual payment must not be called for cards')}} onClose={()=>{}} onRecorded={async()=>{window.recorded=true}}/>);`,
+      contents: `import React from'react';import{createRoot}from'react-dom/client';import{DonationForm}from'./components/donation-form';import{DonorSavedCards}from'./components/donor-saved-cards';import{tableNames}from'./lib/workspace/domain';window.setAccount=()=>{};window.addIfieldKeyPressCallback=(fn)=>{window.cardIssuer=fn};window.setIfieldStyle=(field,style)=>{window.fieldStyles={...window.fieldStyles,[field]:style}};window.getTokens=(ok)=>{document.querySelector('[data-ifields-id="card-number-token"]').value='masked;sut_synthetic_card';document.querySelector('[data-ifields-id="cvv-token"]').value='xxx;sut_synthetic_cvv';ok();};const data={organization:{id:'${org}',name:'Synthetic organization'},role:'owner',tables:Object.fromEntries(tableNames.map((n)=>[n,[]]))};data.tables.donors=[{id:'${donor}',name:'Synthetic donor'}];data.tables.campaigns=[{id:'${campaign}',name:'Synthetic campaign'}];data.tables.pledges=[{id:'${pledge}',donor_id:'${donor}',campaign_id:'${campaign}',amount_minor:100,pledged_on:'2026-01-01',due_date:'2050-01-01'}];const profile=new URLSearchParams(location.search).has('profile');createRoot(document.getElementById('root')).render(profile?<DonorSavedCards organization='${org}' donor='${donor}' demo={false}/>:<DonationForm data={data} demo={false} onSave={async()=>{throw Error('Manual payment must not be called for cards')}} onClose={()=>{}} onRecorded={async()=>{window.recorded=true}}/>);`,
     },
     plugins: [
       {
@@ -69,6 +70,12 @@ async function open(page: Page, profile = false) {
     }),
   );
   await page.goto("/inline-card-harness" + (profile ? "?profile=1" : ""));
+  await page.addStyleTag({
+    content: await readFile("app/globals.css", "utf8"),
+  });
+  await page.addStyleTag({
+    content: await readFile("app/workspace.css", "utf8"),
+  });
   await page.addScriptTag({ content: bundle });
 }
 async function donation(page: Page) {
@@ -121,6 +128,38 @@ test("credit-card choice opens secure fields in the same form and saves only wit
   await expect(page.locator("iframe")).toHaveCount(0);
   await donation(page);
   await expect(page.locator("iframe")).toHaveCount(2);
+  for (const [issuer, label] of [
+    ["visa", "Visa"],
+    ["mastercard", "Mastercard"],
+    ["amex", "American Express"],
+  ]) {
+    await page.evaluate(
+      (issuer) => (window as any).cardIssuer({ issuer }),
+      issuer,
+    );
+    await expect(
+      page.getByLabel(`${label} detected`, { exact: true }),
+    ).toHaveClass(/is-active/);
+  }
+  await page.evaluate(() => (window as any).cardIssuer({ issuer: "unknown" }));
+  await expect(page.locator(".card-network.is-active")).toHaveCount(0);
+  expect(
+    await page
+      .locator("#live-sola-card")
+      .evaluate((el) => el.getBoundingClientRect().height),
+  ).toBeGreaterThanOrEqual(56);
+  expect(
+    await page.evaluate(
+      () => (window as any).fieldStyles["card-number"]["font-size"],
+    ),
+  ).toBe("19px");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page
+      .locator(".card-entry-surface")
+      .evaluate((el) => el.scrollWidth <= el.clientWidth),
+  ).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 1050 });
   await expect(page.locator("form")).toHaveCount(1);
   await expect(page.getByRole("link", { name: /Sola/ })).toHaveCount(0);
   const save = page.getByRole("checkbox", { name: /Save card to donor file/ });

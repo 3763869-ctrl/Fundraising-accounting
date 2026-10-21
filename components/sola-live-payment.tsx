@@ -1,5 +1,7 @@
 "use client";
 import Script from "next/script";
+import { CreditCard, LockKeyhole } from "lucide-react";
+import { CardBrands, cardBrand, type CardBrand } from "./card-brands";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { IFIELDS_BASE } from "@/lib/sola/ifields";
@@ -50,6 +52,24 @@ export function SolaLivePayment({
     fieldError = useRef<HTMLLabelElement>(null),
     pending = useRef(false),
     alive = useRef(true);
+  const [brand, setBrand] = useState<CardBrand>("");
+  const brandCallbackRegistered = useRef(false);
+  const styleFields = () => {
+    const style = {
+      "font-family": "Arial, sans-serif",
+      "font-size": "19px",
+      color: "#292638",
+      border: "none",
+      outline: "none",
+      padding: "0 14px",
+      width: "100%",
+      height: "56px",
+      "box-sizing": "border-box",
+      background: "transparent",
+    };
+    window.setIfieldStyle?.("card-number", style);
+    window.setIfieldStyle?.("cvv", style);
+  };
   const [sdk, setSdk] = useState(false),
     [sdkError, setSdkError] = useState(false),
     [localDonor, setDonor] = useState(""),
@@ -152,6 +172,18 @@ export function SolaLivePayment({
     }
     try {
       window.setAccount(ifieldsKey, "Cedar & Olive", "0.1.0");
+      styleFields();
+      (window.enableAutoFormatting ?? window.enableAutoFormat)?.(" ");
+      if (
+        !brandCallbackRegistered.current &&
+        window.addIfieldKeyPressCallback
+      ) {
+        window.addIfieldKeyPressCallback((data) => {
+          // Only the allow-listed issuer name is consumed; never retain payloads.
+          if (alive.current) setBrand(cardBrand(data?.issuer));
+        });
+        brandCallbackRegistered.current = true;
+      }
       setSdk(true);
     } catch {
       setSdkError(true);
@@ -299,6 +331,7 @@ export function SolaLivePayment({
     }
     setKey(requestKey);
     setSdk(false);
+    setBrand("");
     setExpiry("");
     setZip("");
     setConsent(false);
@@ -383,6 +416,7 @@ export function SolaLivePayment({
                   aria-label="Card to use"
                   value={selected}
                   onChange={(e) => {
+                    setBrand("");
                     setSelected(e.target.value);
                     setConsent(false);
                     setSaveCard(false);
@@ -409,55 +443,91 @@ export function SolaLivePayment({
                   onReady={init}
                   onError={() => setSdkError(true)}
                 />
-                <label htmlFor="live-sola-card">
-                  Card number — securely hosted by Sola
-                </label>
-                <iframe
-                  id="live-sola-card"
-                  inert={stage !== "entry"}
-                  title="Secure card number"
-                  data-ifields-id="card-number"
-                  data-ifields-placeholder="Card number"
-                  src={`${IFIELDS_BASE}/ifield.htm`}
-                  className="sola-hosted-field"
-                />
-                <div className="form-grid">
-                  <label>
-                    Expiration (MMYY)
-                    <input
-                      required
-                      inputMode="numeric"
-                      pattern="(0[1-9]|1[0-2])[0-9]{2}"
-                      maxLength={4}
-                      value={expiry}
-                      onChange={(e) => setExpiry(e.target.value)}
-                      placeholder="MMYY"
-                    />
+                <div className="card-entry-surface">
+                  <div className="card-entry-heading">
+                    <CardBrands active={brand} />
+                    <span className="card-secure-label">
+                      <LockKeyhole size={13} aria-hidden="true" /> Secure entry
+                    </span>
+                  </div>
+                  <label htmlFor="live-sola-card" className="card-input-label">
+                    Card number — securely hosted by Sola
                   </label>
-                  <label>
-                    ZIP code
-                    <input
-                      inputMode="numeric"
-                      pattern="[0-9]{5}(-[0-9]{4})?"
-                      maxLength={10}
-                      value={zip}
-                      onChange={(e) => setZip(e.target.value)}
-                      placeholder="ZIP code"
+                  <div className="card-number-shell">
+                    <CreditCard size={23} aria-hidden="true" />
+                    <iframe
+                      id="live-sola-card"
+                      inert={stage !== "entry"}
+                      title="Secure card number"
+                      data-ifields-id="card-number"
+                      data-ifields-placeholder="0000  0000  0000  0000"
+                      src={`${IFIELDS_BASE}/ifield.htm`}
+                      className="sola-hosted-field"
+                      onLoad={styleFields}
                     />
-                  </label>
+                  </div>
+                  <div className="card-entry-details">
+                    <label>
+                      Expiration (MMYY)
+                      <input
+                        required
+                        inputMode="numeric"
+                        pattern="(0[1-9]|1[0-2])[0-9]{2}"
+                        maxLength={4}
+                        value={expiry}
+                        onChange={(e) =>
+                          setExpiry(e.target.value.replace(/\D/g, ""))
+                        }
+                        placeholder="MMYY"
+                      />
+                    </label>
+                    <div className="card-cvv-field">
+                      <label
+                        htmlFor="live-sola-cvv"
+                        className="card-input-label"
+                      >
+                        Security code (CVV)
+                      </label>
+                      <iframe
+                        id="live-sola-cvv"
+                        inert={stage !== "entry"}
+                        title="Secure security code"
+                        data-ifields-id="cvv"
+                        data-ifields-placeholder="CVV"
+                        src={`${IFIELDS_BASE}/ifield.htm`}
+                        className="sola-hosted-field"
+                        onLoad={styleFields}
+                      />
+                    </div>
+                    <label>
+                      ZIP code
+                      <input
+                        inputMode="numeric"
+                        pattern="[0-9]{5}(-[0-9]{4})?"
+                        maxLength={10}
+                        value={zip}
+                        onChange={(e) => setZip(e.target.value)}
+                        placeholder="ZIP code"
+                      />
+                    </label>
+                    {!saving && vaultEnabled && (
+                      <label className="check-label card-save-option">
+                        <input
+                          type="checkbox"
+                          checked={saveCard}
+                          onChange={(e) => setSaveCard(e.target.checked)}
+                        />{" "}
+                        Save card to donor file
+                      </label>
+                    )}
+                  </div>
+                  {!saving && vaultEnabled && (
+                    <p className="card-save-caption">
+                      Save only with the cardholder’s permission for future
+                      donations.
+                    </p>
+                  )}
                 </div>
-                <label htmlFor="live-sola-cvv">
-                  Security code — securely hosted by Sola
-                </label>
-                <iframe
-                  id="live-sola-cvv"
-                  inert={stage !== "entry"}
-                  title="Secure security code"
-                  data-ifields-id="cvv"
-                  data-ifields-placeholder="CVV"
-                  src={`${IFIELDS_BASE}/ifield.htm`}
-                  className="sola-hosted-field"
-                />
                 <input
                   type="hidden"
                   name="xCardNum"
@@ -473,17 +543,6 @@ export function SolaLivePayment({
                 <div hidden>
                   <label ref={fieldError} data-ifields-id="card-data-error" />
                 </div>
-                {!saving && vaultEnabled && (
-                  <label className="check-label">
-                    <input
-                      type="checkbox"
-                      checked={saveCard}
-                      onChange={(e) => setSaveCard(e.target.checked)}
-                    />
-                    Save card to donor file — the cardholder agrees to secure
-                    storage for future donations.
-                  </label>
-                )}
               </>
             ) : (
               <p>
