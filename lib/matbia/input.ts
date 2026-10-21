@@ -64,8 +64,11 @@ export function parseMatbiaInput(value: unknown, org: string, limit: number) {
           "description",
           "collector",
           "credit_confirmed",
+          "remainder_mode",
         ].includes(k),
     ) ||
+    (d.remainder_mode !== undefined &&
+      !["donation", "credit"].includes(String(d.remainder_mode))) ||
     !uuid.test(String(d.campaign_id)) ||
     ["fundraiser_id", "sponsorship_id", "event_id"].some(
       (k) => d[k] != null && !uuid.test(String(d[k])),

@@ -22,3 +22,13 @@ Migration `202610200013_donation_workspace.sql` adds metadata, RPCs, permission 
 Cash payments have Void cash payment in the row menu and detail card. A reason and correction date are required. Voids retain the payment, original receipt snapshots and archived allocations, mark receipts void, reopen linked pledges and installments, and post balanced reversing entries. They cannot refund cash or void a processor transaction. Already deposited cash retains its bank and reconciliation history; the amount moves to a cash suspense liability and creates a review task. Clear that suspense after examining the actual bank movement. Cash-basis reports retain the original income before the void date and show the reversal in the correction period.
 
 Matbia setup, safety gates and isolated provider sandbox verification are documented in [MATBIA_SETUP.md](MATBIA_SETUP.md). Sample simulations clearly label themselves and never request a real card.
+
+## Global New Transaction flow
+
+The top bar opens Donor info → Amount → Payment type from every workspace page. Enter/search an existing donor, create a name, or skip to an organization-scoped anonymous donor. Anonymous payments cannot create account credit or new pledges. Payment choices include secure Sola credit cards, Matbia/other charity cards, cash, check, received ACH/bank transfer, Zelle, other, and a new pledge. ACH and other manual methods record money already received; they do not initiate transfers.
+
+A lazy, idempotent setup RPC creates the organization's “Synagogue — General donations” default campaign in an unrestricted fund and a single anonymous bookkeeping donor. Nothing is seeded into production by demo mode. The campaign can be overridden for a transaction in the summary panel.
+
+Selected pledge allocations always follow each pledge's original campaign/fund. The remainder defaults to a new donation, recorded as a fully paid `direct_donation` commitment plus allocation so income posts once, the subledger remains balanced, and no open pledge remains. A small, opt-in control instead retains the remainder as donor credit. Open pledges left entirely unapplied require confirmation. Direct-donation commitments are voided with a cash payment; genuine unpaid pledges reopen. Legacy payment-entry paths keep their existing explicit credit workflow.
+
+Server-side Sola and Matbia finalizers apply this disposition only after confirmed approval and successful requested allocations. Declines/unknown responses create no direct donation. Allocation conflicts preserve funds as credit for review instead of silently moving them to another campaign. Browser code cannot invoke the internal finalization helpers. Donation and pledge retries use immutable request keys.

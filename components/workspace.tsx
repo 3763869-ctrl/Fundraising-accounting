@@ -65,6 +65,7 @@ import { pageTitles, tableView } from "@/lib/workspace/views";
 import { VoidCashForm } from "./void-cash-form";
 import { DonorSavedCards } from "./donor-saved-cards";
 import { RowMenu } from "./row-menu";
+import { TransactionWizard } from "./transaction-wizard";
 import { DonationForm } from "./donation-form";
 import { DonationEdit } from "./donation-edit";
 import { PledgeInvoice } from "./pledge-invoice";
@@ -1439,10 +1440,34 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             </span>
           </div>
           <div className="row">
-            <span className={`environment-badge ${demo ? "" : "live"}`}>
-              <span />
-              {demo ? "SAMPLE DATA" : "LIVE DATABASE"}
-            </span>
+            {financeWritable && (
+              <button
+                type="button"
+                className="top-new-transaction"
+                disabled={busy}
+                onClick={async () => {
+                  try {
+                    await save({ type: "transaction_setup", values: {} });
+                    setDetail(null);
+                    setForm({ kind: "transaction" });
+                  } catch (e) {
+                    setError(
+                      e instanceof Error
+                        ? e.message
+                        : "Unable to start transaction.",
+                    );
+                  }
+                }}
+              >
+                <Plus size={16} /> New Transaction
+              </button>
+            )}
+            {demo && (
+              <span className="environment-badge">
+                <span />
+                SAMPLE DATA
+              </span>
+            )}
             {demo ? (
               <Link className="top-signin" href="/login">
                 <LogIn size={15} />
@@ -1996,25 +2021,37 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       {form && (
         <Modal
           title={
-            form.kind === "cash_void"
-              ? "Void cash payment"
-              : form.kind === "donation_edit"
-                ? "Edit donation"
-                : form.kind === "donors"
-                  ? "Add New Donor"
-                  : form.kind === "donor_edit"
-                    ? "Edit donor"
-                    : form.kind === "organization_update"
-                      ? "Edit organization"
-                      : form.kind === "batch"
-                        ? "Batch payment entry"
-                        : form.kind === "allocate"
-                          ? "Allocate donor credit"
-                          : `Add ${form.kind === "payment" ? "payment" : form.kind === "schedule" ? "payment plan" : form.kind.replaceAll("_", " ").replace(/s$/, "")}`
+            form.kind === "transaction"
+              ? "New Transaction"
+              : form.kind === "cash_void"
+                ? "Void cash payment"
+                : form.kind === "donation_edit"
+                  ? "Edit donation"
+                  : form.kind === "donors"
+                    ? "Add New Donor"
+                    : form.kind === "donor_edit"
+                      ? "Edit donor"
+                      : form.kind === "organization_update"
+                        ? "Edit organization"
+                        : form.kind === "batch"
+                          ? "Batch payment entry"
+                          : form.kind === "allocate"
+                            ? "Allocate donor credit"
+                            : `Add ${form.kind === "payment" ? "payment" : form.kind === "schedule" ? "payment plan" : form.kind.replaceAll("_", " ").replace(/s$/, "")}`
           }
           onClose={() => setForm(null)}
         >
-          {form.kind === "cash_void" ? (
+          {form.kind === "transaction" ? (
+            <TransactionWizard
+              data={data}
+              demo={demo}
+              onSave={save}
+              onRecorded={async () => {
+                setData(await loadWorkspace(demo));
+              }}
+              onClose={() => setForm(null)}
+            />
+          ) : form.kind === "cash_void" ? (
             <VoidCashForm
               row={form.preset as Row}
               onSave={save}

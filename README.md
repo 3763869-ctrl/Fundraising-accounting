@@ -37,3 +37,5 @@ The `uuid` override preserves ExcelJS's CommonJS v4 API while selecting a patche
 The `fundraising/` Python app and `tests/test_foundation.py` are retained from the initial local prototype. They are superseded and are not the Vercel backend or the web app's accounting system.
 
 Matbia charity-card setup and sandbox separation: see [MATBIA_SETUP.md](MATBIA_SETUP.md). Live Matbia processing remains disabled pending provider activation.
+
+The global **New Transaction** button provides a donor → amount → payment-type wizard with anonymous donations, pledge campaign preservation, a default synagogue donation campaign, and optional donor credit. See [DONATIONS_WORKSPACE.md](DONATIONS_WORKSPACE.md) for accounting and payment-provider behavior.

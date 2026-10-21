@@ -231,6 +231,15 @@ export async function runCommand(
     case "cash_void":
       result = await db.rpc("void_cash_payment", v);
       break;
+    case "transaction_pledge":
+      result = await db.rpc("record_transaction_pledge", { org, details: v });
+      break;
+    case "transaction_setup":
+      result = await db.rpc("ensure_transaction_setup", { org });
+      break;
+    case "transaction_payment":
+      result = await db.rpc("record_transaction_payment", { org, details: v });
+      break;
     case "donation_payment":
       result = await db.rpc("record_donation_payment", { org, details: v });
       break;

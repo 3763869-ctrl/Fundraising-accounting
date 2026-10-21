@@ -52,6 +52,9 @@ export const tableNames = [
 ] as const;
 export type Command = {
   type:
+    | "transaction_setup"
+    | "transaction_payment"
+    | "transaction_pledge"
     | "insert"
     | "cash_void"
     | "matbia_demo_prepare"
@@ -283,6 +286,31 @@ export function applyCommand(
       );
     }
   };
+  const completeDonation = (p: Row) => {
+    if (
+      p.status !== "processed" ||
+      p.remainder_mode !== "donation" ||
+      p.direct_pledge_id
+    )
+      return;
+    const amount = credit(data, p);
+    if (amount <= 0) return;
+    find("campaigns", p.campaign_id);
+    const pledge = add("pledges", {
+      donor_id: p.donor_id,
+      campaign_id: p.campaign_id,
+      amount_minor: amount,
+      pledged_on: p.paid_on,
+      due_date: p.paid_on,
+      description: p.description ?? "",
+      source_type: "direct_donation",
+      fundraiser_id: p.fundraiser_id,
+      sponsorship_id: p.sponsorship_id,
+      event_id: p.event_id,
+    });
+    allocate(p, [{ pledge_id: pledge.id, amount_minor: amount }]);
+    p.direct_pledge_id = pledge.id;
+  };
   const payment = (values: Record<string, unknown>) => {
     const existing = tables.payments.find(
       (p) => p.idempotency_key === values.idempotency_key,
@@ -351,6 +379,7 @@ export function applyCommand(
     } else if (p.status === "processed") allocate(p, values.allocations ?? []);
     else if (Array.isArray(values.allocations) && values.allocations.length)
       throw new Error("Pending or failed payments cannot fulfill pledges.");
+    if (values.remainder_mode === "donation") completeDonation(p);
     if (p.status === "failed")
       for (const rule of tables.automation_rules.filter(
         (r) =>
@@ -754,6 +783,9 @@ export function applyCommand(
         allocations,
         deposit_status: p.deposit_status,
       };
+      if (p.direct_pledge_id)
+        find("pledges", p.direct_pledge_id).voided_at =
+          new Date().toISOString();
       p.status = "voided";
       p.voided_at = new Date().toISOString();
       p.void_reason = reason;
@@ -888,11 +920,78 @@ export function applyCommand(
           p.allocation_review = true;
         }
       } else if (v.outcome === "declined") p.status = "failed";
+      if (!p.allocation_review) completeDonation(p);
       audit(p.donor_id, "payment", `Matbia simulation: ${v.outcome}`);
       break;
     }
+    case "transaction_pledge": {
+      if (
+        role === "accountant" ||
+        find("donors", v.donor_id).system_role === "anonymous"
+      )
+        throw new Error(
+          "Select a named donor; fundraising permission required",
+        );
+      const existing = tables.pledges.find(
+        (p) => p.transaction_key === v.transaction_key,
+      );
+      if (existing) {
+        if (JSON.stringify(existing.transaction_payload) !== JSON.stringify(v))
+          throw new Error("Transaction key reused");
+        break;
+      }
+      find("campaigns", v.campaign_id);
+      if (
+        !Number.isSafeInteger(v.amount_minor) ||
+        Number(v.amount_minor) < 1 ||
+        Number(v.amount_minor) > 99999999999
+      )
+        throw new Error("Invalid pledge amount");
+      dateValue(v.pledged_on);
+      dateValue(v.due_date);
+      add("pledges", {
+        ...v,
+        transaction_payload: structuredClone(v),
+        source_type: "pledge",
+      });
+      audit(v.donor_id, "pledge", "New transaction pledge created");
+      break;
+    }
+    case "transaction_setup": {
+      if (!data.organization.default_donation_campaign_id) {
+        const c = add("campaigns", {
+          name: "Synagogue — General donations",
+          fund_id: (
+            tables.funds.find((f) => !f.restricted) ??
+            add("funds", { name: "General operating", restricted: false })
+          ).id,
+        });
+        data.organization.default_donation_campaign_id = c.id;
+      }
+      if (!tables.donors.some((d) => d.system_role === "anonymous"))
+        add("donors", {
+          name: "Anonymous donor",
+          system_role: "anonymous",
+          receipt_language: "en",
+        });
+      break;
+    }
+    case "transaction_payment":
     case "donation_payment": {
       find("campaigns", v.campaign_id);
+      if (command.type === "transaction_payment") {
+        if (
+          !["donation", "credit"].includes(String(v.remainder_mode)) ||
+          v.status !== "processed" ||
+          v.method === "external_card"
+        )
+          throw new Error("Use the appropriate payment workflow");
+        if (
+          v.remainder_mode === "credit" &&
+          find("donors", v.donor_id).system_role === "anonymous"
+        )
+          throw new Error("Select a named donor for account credit");
+      }
       for (const [key, table] of [
         ["fundraiser_id", "fundraisers"],
         ["sponsorship_id", "sponsorships"],

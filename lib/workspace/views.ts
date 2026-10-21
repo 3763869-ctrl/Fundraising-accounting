@@ -532,7 +532,7 @@ export function tableView(
     keys = { ...keys, ...extraColumns, id: "Pledge ID", type: "Type" };
     rows = view(t.pledges, (p) => ({
       ...donorColumns(p),
-      type: "Pledge",
+      type: p.source_type === "direct_donation" ? "Donation" : "Pledge",
       donor: name("donors", p.donor_id),
       date: String(p.pledged_on),
       amount: currency(p.amount_minor),
@@ -577,7 +577,22 @@ export function tableView(
     rows = view(t.payments, (p) => ({
       ...donorColumns(p),
       type: "Payment",
-      campaign: name("campaigns", p.campaign_id),
+      campaign: [
+        ...new Set([
+          ...t.payment_allocations
+            .filter((a) => a.payment_id === p.id)
+            .map((a) =>
+              name(
+                "campaigns",
+                t.pledges.find((pl) => pl.id === a.pledge_id)?.campaign_id,
+              ),
+            ),
+          ...(credit(data, p) > 0 ||
+          !t.payment_allocations.some((a) => a.payment_id === p.id)
+            ? [name("campaigns", p.campaign_id)]
+            : []),
+        ]),
+      ].join(" · "),
       fundraiser: name("fundraisers", p.fundraiser_id),
       collector: String(p.collector ?? ""),
       processed: String(p.status),
