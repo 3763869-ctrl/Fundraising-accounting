@@ -30,7 +30,7 @@ export default function Home() {
     <main className="shell">
       <header className="topbar">
         <Link className="brand" href="/">
-          <span className="mark">f</span>Cedar & Olive
+          <span className="mark">F</span>Fundora
         </Link>
         <Link className="button light" href="/login">
           Sign in

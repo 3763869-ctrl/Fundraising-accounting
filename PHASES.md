@@ -1,4 +1,4 @@
-# Cedar & Olive: scope and remaining work
+# Fundora: scope and remaining work
 
 Original branding/design. DonorFuse was supplied as a functional reference; its private screens were not accessible. No proprietary source or assets were copied.
 

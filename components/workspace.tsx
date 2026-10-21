@@ -41,7 +41,6 @@ import {
   Webhook,
   ChevronDown,
   Plus,
-  TreePine,
   RotateCcw,
   LogIn,
   X,
@@ -329,7 +328,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
   if (loading)
     return (
       <main className="workspace-loading">
-        <TreePine size={36} />
+        <span className="app-brand-mark">F</span>
         <h1>Opening your workspace…</h1>
         <p>Connecting your community’s records.</p>
       </main>
@@ -337,7 +336,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
   if (!data)
     return (
       <main className="workspace-loading">
-        <TreePine size={36} />
+        <span className="app-brand-mark">F</span>
         <h1>Let’s connect your workspace.</h1>
         <p className="notice" role="alert">
           {error}
@@ -1322,10 +1321,10 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       <aside className="app-sidebar">
         <Link className="app-brand" href="/">
           <span className="app-brand-mark">
-            <TreePine size={23} />
+            F
           </span>
           <span>
-            Cedar & Olive<small>COMMUNITY MANAGEMENT</small>
+            Fundora<small>DONORS & ACCOUNTING</small>
           </span>
         </Link>
         <button
@@ -2008,8 +2007,8 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
           )}
           <footer className="app-footer">
             <span>
-              <TreePine size={13} />
-              Cedar & Olive
+              F
+              Fundora
             </span>
             <span>Built for the work that brings people together.</span>
             <span>

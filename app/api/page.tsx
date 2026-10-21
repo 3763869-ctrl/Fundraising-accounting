@@ -3,7 +3,7 @@ export default function ApiDocs() {
   return (
     <main className="shell">
       <Link className="brand" href="/">
-        Cedar & Olive
+        Fundora
       </Link>
       <section className="card">
         <p className="eyebrow">Authenticated API · v1</p>

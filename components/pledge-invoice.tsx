@@ -30,7 +30,7 @@ export function PledgeInvoice({
         className="receipt-document"
         dir={donor?.receipt_language === "he" ? "rtl" : "ltr"}
       >
-        <div className="receipt-brand">Cedar & Olive</div>
+        <div className="receipt-brand">Fundora</div>
         {demo && <p>SAMPLE DOCUMENT</p>}
         <h1>{String(data.organization.name)}</h1>
         <h2>Pledge statement</h2>

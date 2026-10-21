@@ -32,7 +32,7 @@ export function Modal({
     <dialog className="modal" ref={ref} onCancel={onClose}>
       <header>
         <div>
-          <p className="eyebrow">Cedar & Olive · Workspace</p>
+          <p className="eyebrow">Fundora · Workspace</p>
           <h2>{title}</h2>
         </div>
         <button

@@ -1,4 +1,4 @@
-# Cedar & Olive
+# Fundora
 
 A nonprofit and synagogue workspace built with **Next.js, Supabase, and TypeScript**, intended for Vercel. United States / USD. Original branding and interface, based on the requested DonorFuse-style functional structure.
 

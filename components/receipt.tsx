@@ -19,7 +19,7 @@ export function Receipt({ receipt, demo }: { receipt: Row; demo: boolean }) {
             <strong>VOID — this payment receipt is no longer valid</strong>
           </div>
         )}
-        <div className="receipt-brand">Cedar & Olive</div>
+        <div className="receipt-brand">Fundora</div>
         {demo && (
           <div className="sample-watermark">SAMPLE — NOT A TAX RECEIPT</div>
         )}

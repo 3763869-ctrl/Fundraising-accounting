@@ -23,7 +23,7 @@ export default async function Join({
   return (
     <main className="shell">
       <section className="auth card">
-        <p className="eyebrow">Cedar & Olive</p>
+        <p className="eyebrow">Fundora</p>
         <h1>Join your community.</h1>
         <p>
           Invitations expire after seven days and require a verified account
