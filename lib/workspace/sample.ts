@@ -11,7 +11,7 @@ import {
 export function sampleData(): WorkspaceData {
   const organization = {
     id: crypto.randomUUID(),
-    name: "Cedar & Olive Community",
+    name: "Fundora Demo Community",
     hebrew_name: "קהילת ארז וזית",
     currency: "USD",
     timezone: "America/New_York",
