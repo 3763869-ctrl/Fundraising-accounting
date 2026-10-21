@@ -23,7 +23,7 @@ export default async function Login({
   return (
     <main className="shell">
       <Link className="brand" href="/">
-        <span className="mark">f</span>Fundraising & Accounting
+        <span className="mark">F</span>Fundora
       </Link>
       <section className="auth card">
         <p className="eyebrow">Your organization starts here</p>
