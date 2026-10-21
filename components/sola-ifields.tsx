@@ -10,7 +10,11 @@ declare global {
     enableAutoFormatting?: (separator: string) => void;
     enableAutoFormat?: (separator: string) => void;
     addIfieldKeyPressCallback?: (
-      callback: (data: { issuer?: unknown }) => void,
+      callback: (data: {
+        issuer?: unknown;
+        cardNumberIsValid?: unknown;
+        cardNumberFormattedLength?: unknown;
+      }) => void,
     ) => void;
     setAccount?: (key: string, name: string, version: string) => void;
     getTokens?: (

@@ -147,12 +147,35 @@ test("credit-card choice opens secure fields in the same form and saves only wit
     await page
       .locator("#live-sola-card")
       .evaluate((el) => el.getBoundingClientRect().height),
-  ).toBeGreaterThanOrEqual(56);
+  ).toBeGreaterThanOrEqual(42);
   expect(
     await page.evaluate(
       () => (window as any).fieldStyles["card-number"]["font-size"],
     ),
-  ).toBe("19px");
+  ).toBe("16px");
+  await page.evaluate(() =>
+    (window as any).cardIssuer({
+      issuer: "visa",
+      cardNumberIsValid: false,
+      cardNumberFormattedLength: 19,
+    }),
+  );
+  await expect(
+    page.getByText("Check the card number", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Charge $1.00", exact: true }),
+  ).toBeDisabled();
+  await page.evaluate(() =>
+    (window as any).cardIssuer({
+      issuer: "visa",
+      cardNumberIsValid: true,
+      cardNumberFormattedLength: 19,
+    }),
+  );
+  await expect(
+    page.getByText("Card number passes validation", { exact: true }),
+  ).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
     await page

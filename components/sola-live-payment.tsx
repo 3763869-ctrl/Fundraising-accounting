@@ -1,6 +1,11 @@
 "use client";
 import Script from "next/script";
-import { CreditCard, LockKeyhole } from "lucide-react";
+import {
+  CreditCard,
+  LockKeyhole,
+  CircleCheck,
+  CircleAlert,
+} from "lucide-react";
 import { CardBrands, cardBrand, type CardBrand } from "./card-brands";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -53,17 +58,20 @@ export function SolaLivePayment({
     pending = useRef(false),
     alive = useRef(true);
   const [brand, setBrand] = useState<CardBrand>("");
+  const [numberStatus, setNumberStatus] = useState<
+    "empty" | "incomplete" | "valid" | "invalid"
+  >("empty");
   const brandCallbackRegistered = useRef(false);
   const styleFields = () => {
     const style = {
       "font-family": "Arial, sans-serif",
-      "font-size": "19px",
+      "font-size": "16px",
       color: "#292638",
       border: "none",
       outline: "none",
       padding: "0 14px",
       width: "100%",
-      height: "56px",
+      height: "42px",
       "box-sizing": "border-box",
       background: "transparent",
     };
@@ -180,7 +188,23 @@ export function SolaLivePayment({
       ) {
         window.addIfieldKeyPressCallback((data) => {
           // Only the allow-listed issuer name is consumed; never retain payloads.
-          if (alive.current) setBrand(cardBrand(data?.issuer));
+          if (alive.current) {
+            setBrand(cardBrand(data?.issuer));
+            if (
+              typeof data?.cardNumberIsValid === "boolean" &&
+              typeof data.cardNumberFormattedLength === "number"
+            ) {
+              setNumberStatus(
+                data.cardNumberFormattedLength === 0
+                  ? "empty"
+                  : data.cardNumberIsValid
+                    ? "valid"
+                    : data.cardNumberFormattedLength < 12
+                      ? "incomplete"
+                      : "invalid",
+              );
+            }
+          }
         });
         brandCallbackRegistered.current = true;
       }
@@ -197,7 +221,8 @@ export function SolaLivePayment({
       !key ||
       !donor ||
       !consent ||
-      (selected === "new" && !sdk)
+      (selected === "new" &&
+        (!sdk || numberStatus === "invalid" || numberStatus === "incomplete"))
     )
       return;
     if (!saving && !/^\d{1,9}(\.\d{1,2})?$/.test(amount)) return;
@@ -331,6 +356,7 @@ export function SolaLivePayment({
     }
     setKey(requestKey);
     setSdk(false);
+    setNumberStatus("empty");
     setBrand("");
     setExpiry("");
     setZip("");
@@ -416,6 +442,7 @@ export function SolaLivePayment({
                   aria-label="Card to use"
                   value={selected}
                   onChange={(e) => {
+                    setNumberStatus("empty");
                     setBrand("");
                     setSelected(e.target.value);
                     setConsent(false);
@@ -453,7 +480,9 @@ export function SolaLivePayment({
                   <label htmlFor="live-sola-card" className="card-input-label">
                     Card number — securely hosted by Sola
                   </label>
-                  <div className="card-number-shell">
+                  <div
+                    className={`card-number-shell card-number-${numberStatus}`}
+                  >
                     <CreditCard size={23} aria-hidden="true" />
                     <iframe
                       id="live-sola-card"
@@ -466,6 +495,26 @@ export function SolaLivePayment({
                       onLoad={styleFields}
                     />
                   </div>
+                  {numberStatus !== "empty" && (
+                    <p
+                      className={`card-number-feedback ${numberStatus}`}
+                      role="status"
+                    >
+                      {numberStatus === "valid" ? (
+                        <>
+                          <CircleCheck size={14} aria-hidden="true" /> Card
+                          number passes validation
+                        </>
+                      ) : numberStatus === "invalid" ? (
+                        <>
+                          <CircleAlert size={14} aria-hidden="true" /> Check the
+                          card number
+                        </>
+                      ) : (
+                        "Keep entering the card number…"
+                      )}
+                    </p>
+                  )}
                   <div className="card-entry-details">
                     <label>
                       Expiration (MMYY)
@@ -565,7 +614,10 @@ export function SolaLivePayment({
               type={embedded ? "button" : "submit"}
               onClick={embedded ? submit : undefined}
               disabled={
-                (selected === "new" && !sdk) ||
+                (selected === "new" &&
+                  (!sdk ||
+                    numberStatus === "invalid" ||
+                    numberStatus === "incomplete")) ||
                 !consent ||
                 !donor ||
                 stage !== "entry"
