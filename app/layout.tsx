@@ -3,7 +3,7 @@ import "./globals.css";
 import "./workspace.css";
 
 export const metadata: Metadata = {
-  title: "Cedar & Olive | Community Management",
+  title: "Fundora | Community Management",
   description: "A home for your donors, campaigns, and organization finances.",
 };
 
