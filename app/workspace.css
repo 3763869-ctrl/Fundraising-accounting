@@ -2143,3 +2143,57 @@ button:disabled {
     grid-template-columns: auto minmax(0, 1fr) 90px;
   }
 }
+.donation-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.sola-hosted-field {
+  display: block;
+  width: 100%;
+  height: 48px;
+  border: 1px solid #c9d0c4;
+  border-radius: 7px;
+  margin: 8px 0 16px;
+  background: white;
+}
+.sola-inline-card {
+  background: #f5f3fa;
+  border: 1px solid #ddd7ec;
+  border-radius: 10px;
+  padding: 18px;
+  margin-top: 16px;
+}
+.sola-inline-card .check-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+}
+.sola-inline-card input[type="checkbox"] {
+  width: auto;
+}
+.sample-card-field {
+  padding: 14px;
+  color: #777;
+}
+.receipt-void {
+  display: block;
+  border: 3px solid #9d2222;
+  color: #9d2222;
+  padding: 16px;
+  margin-bottom: 24px;
+  font-size: 20px;
+}
+.status-voided {
+  background: #fbe7e4;
+  color: #8b3029;
+}
+@media print {
+  .receipt-document .receipt-void {
+    display: block !important;
+    border: 3px solid black !important;
+    color: black !important;
+  }
+}

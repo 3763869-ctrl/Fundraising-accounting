@@ -53,6 +53,7 @@ export const tableNames = [
 export type Command = {
   type:
     | "insert"
+    | "cash_void"
     | "payment"
     | "donation_payment"
     | "donation_edit"
@@ -655,6 +656,121 @@ export function applyCommand(
         table === "donors" ? r.id : v.donor_id,
         "created",
         `${table.replaceAll("_", " ")} record created`,
+      );
+      break;
+    }
+    case "cash_void": {
+      const p = find("payments", v.payment);
+      if (p.method !== "cash")
+        throw new Error("Only cash payments can be voided here");
+      if (p.status === "voided") break;
+      const dated = dateValue(v.dated),
+        reason = String(v.reason ?? "").trim();
+      if (!reason || reason.length > 500 || dated < String(p.paid_on))
+        throw new Error("A reason and valid void date are required");
+      const allocations = tables.payment_allocations
+        .filter((a) => a.payment_id === p.id)
+        .map((a) => ({
+          ...a,
+          fund_id:
+            tables.campaigns.find(
+              (c) =>
+                c.id ===
+                tables.pledges.find((pl) => pl.id === a.pledge_id)?.campaign_id,
+            )?.fund_id ?? null,
+        }));
+      for (const e of [...tables.journal_entries].filter((e) =>
+        allocations.some((a) =>
+          String(e.event_key).startsWith(`allocation:${a.id}:`),
+        ),
+      )) {
+        if (dated < String(e.entry_date))
+          throw new Error("Void date must follow all allocation dates");
+        const lines = tables.journal_lines
+          .filter((l) => l.entry_id === e.id)
+          .map((l) => ({
+            account_id: String(l.account_id),
+            fund_id: l.fund_id,
+            credit_minor: Number(l.debit_minor ?? 0),
+            debit_minor: Number(l.credit_minor ?? 0),
+          }));
+        postLedger(
+          data,
+          `cash-void:${p.id}:${e.id}`,
+          dated,
+          `Void cash allocation: ${reason}`,
+          "cash_void",
+          lines,
+        );
+      }
+      if (p.status === "processed") {
+        let target = accountId(data, "1050");
+        if (p.deposit_status === "deposited") {
+          if (!tables.accounts.some((a) => a.code === "2995"))
+            add("accounts", {
+              code: "2995",
+              name: "Voided deposited cash suspense",
+              kind: "liability",
+              purpose: "general",
+            });
+          const suspense = tables.accounts.find(
+            (a) => a.code === "2995" && a.kind === "liability",
+          );
+          if (!suspense)
+            throw new Error("Cash suspense account needs configuration");
+          target = suspense.id;
+          add("tasks", {
+            donor_id: p.donor_id,
+            subject: "Review voided deposited cash",
+            description: `Payment ${p.id} was voided. Bank deposit retained; review cash suspense. Reason: ${reason}`,
+            due_date: dated,
+            priority: "high",
+            status: "open",
+          });
+        }
+        postLedger(
+          data,
+          `cash-void:${p.id}:payment`,
+          dated,
+          `Void cash payment: ${reason}`,
+          "cash_void",
+          [
+            {
+              account_id: accountId(data, "2100"),
+              debit_minor: Number(p.amount_minor),
+            },
+            { account_id: target, credit_minor: Number(p.amount_minor) },
+          ],
+        );
+      }
+      p.cash_void_snapshot = {
+        original_status: p.status,
+        allocations,
+        deposit_status: p.deposit_status,
+      };
+      p.status = "voided";
+      p.voided_at = new Date().toISOString();
+      p.void_reason = reason;
+      p.void_date = dated;
+      tables.payment_allocations = tables.payment_allocations.filter(
+        (a) => a.payment_id !== p.id,
+      );
+      for (const i of tables.installments)
+        if (i.payment_id === p.id) i.payment_id = null;
+      for (const plan of tables.schedules)
+        if (
+          plan.status === "completed" &&
+          tables.installments.some(
+            (i) => i.schedule_id === plan.id && !i.payment_id,
+          )
+        )
+          plan.status = "active";
+      for (const r of tables.receipts)
+        if (r.payment_id === p.id) r.voided_at = p.voided_at;
+      audit(
+        p.donor_id,
+        "cash_payment_void",
+        `Cash payment ${p.id} voided: ${reason}`,
       );
       break;
     }

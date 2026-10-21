@@ -186,6 +186,18 @@ export function financialRows(
       if (between(p.paid_on) && (!fund || campaign?.fund_id === fund))
         accumulate(contributions.id, Number(allocation.amount_minor));
     }
+    for (const payment of t.payments.filter(
+      (p) => p.status === "voided" && p.cash_void_snapshot,
+    )) {
+      const snapshot = payment.cash_void_snapshot as { allocations: Row[] };
+      for (const allocation of snapshot.allocations ?? [])
+        if (!fund || allocation.fund_id === fund) {
+          if (between(payment.paid_on))
+            accumulate(contributions.id, Number(allocation.amount_minor));
+          if (between(payment.void_date))
+            accumulate(contributions.id, -Number(allocation.amount_minor));
+        }
+    }
     for (const payment of t.bill_payments) {
       const bill = t.bills.find((b) => b.id === payment.bill_id)!;
       if (between(payment.paid_on) && (!fund || bill.fund_id === fund))

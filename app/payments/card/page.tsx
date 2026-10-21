@@ -7,6 +7,7 @@ import {
   solaIdentity,
   solaOwner,
 } from "@/lib/sola/server";
+import { vaultConfigured } from "@/lib/sola/card-server";
 import { SolaMerchantConnect } from "@/components/sola-merchant-connect";
 import { SolaLivePayment } from "@/components/sola-live-payment";
 export const dynamic = "force-dynamic";
@@ -90,6 +91,7 @@ export default async function CardPayment() {
             ifieldsKey={process.env.NEXT_PUBLIC_SOLA_IFIELDS_KEY!}
             donors={donors}
             limit={liveLimit()}
+            vaultEnabled={vaultConfigured()}
           />
         ) : (
           <p>

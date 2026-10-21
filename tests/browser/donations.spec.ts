@@ -142,5 +142,52 @@ test("pledge allocation, explicit credit confirmation, paid archive, editable ca
     .getByRole("textbox", { name: "Search Payments" })
     .fill("Donation Allocation Test");
   await expect(page.getByText("of 2 records", { exact: false })).toBeVisible();
+  const cashRow = page
+    .getByRole("row")
+    .filter({ has: page.getByRole("cell", { name: "$100.00", exact: true }) });
+  await cashRow.getByRole("button", { name: "View →", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Create acknowledgment", exact: true })
+    .click();
+  await expect(page.locator(".receipt-document")).toBeVisible();
+  await page.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await cashRow.getByLabel(/^Actions /).click();
+  await page
+    .getByRole("button", { name: "Void cash payment", exact: true })
+    .click();
+  dialog = page.getByRole("dialog");
+  await dialog
+    .getByLabel("Reason for voiding")
+    .fill("Duplicate cash record in browser test");
+  await dialog
+    .getByRole("checkbox", {
+      name: "I confirm this cash payment should be voided.",
+    })
+    .check();
+  await dialog
+    .getByRole("button", { name: "Void cash payment", exact: true })
+    .click();
+  await expect(dialog).not.toBeVisible();
+  await expect(
+    cashRow.getByRole("cell", { name: "voided", exact: true }),
+  ).toBeVisible();
+  await cashRow.getByRole("button", { name: "View →", exact: true }).click();
+  await page
+    .getByRole("button", { name: "View voided receipt", exact: true })
+    .click();
+  await expect(page.locator(".receipt-document")).toContainText(
+    "VOID — this payment receipt is no longer valid",
+  );
+  await page.emulateMedia({ media: "print" });
+  await expect(page.locator(".receipt-void")).toBeVisible();
+  await page.emulateMedia({ media: "screen" });
+  await page.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await page.getByRole("link", { name: "Pledges", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Search Pledges" })
+    .fill("Donation Allocation Test");
+  await expect(
+    page.getByRole("cell", { name: "Open", exact: true }),
+  ).toBeVisible();
   expect(errors).toEqual([]);
 });

@@ -223,6 +223,9 @@ export async function runCommand(
         .from(command.table!)
         .insert({ ...v, organization_id: org });
       break;
+    case "cash_void":
+      result = await db.rpc("void_cash_payment", v);
+      break;
     case "donation_payment":
       result = await db.rpc("record_donation_payment", { org, details: v });
       break;

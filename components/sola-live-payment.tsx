@@ -3,39 +3,69 @@ import Script from "next/script";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { IFIELDS_BASE } from "@/lib/sola/ifields";
-
+export type CardDonationContext = {
+  organization: string;
+  donation?: Record<string, unknown>;
+  allocations?: { pledge_id: string; amount_minor: number }[];
+};
 type Result = {
   state: string;
   reference?: string;
   payment?: string;
   error?: string;
   allocation_review?: boolean;
-  already_submitted?: boolean;
+  card_saved?: boolean;
+  save_error?: boolean;
 };
-const storageKey = "cedar-olive-live-card-attempt";
+type SavedCard = { id: string; brand: string; last4: string; expiry: string };
+type Embedded = {
+  donor: string;
+  amount: string;
+  beforeSubmit: () => CardDonationContext | null;
+  onRecorded: () => Promise<void>;
+  onBusy?: (busy: boolean) => void;
+};
 export function SolaLivePayment({
   ifieldsKey,
   donors,
   limit,
+  vaultEnabled = false,
+  embedded,
+  mode = "charge",
 }: {
   ifieldsKey: string;
   donors: { id: string; name: string }[];
   limit: number;
+  vaultEnabled?: boolean;
+  embedded?: Embedded;
+  mode?: "charge" | "save";
 }) {
+  const saving = mode === "save",
+    endpoint = saving ? "/api/sola/cards" : "/api/sola/payments",
+    storageKey = saving
+      ? "cedar-olive-card-save-attempt"
+      : "cedar-olive-live-card-attempt";
   const card = useRef<HTMLInputElement>(null),
-    cvv = useRef<HTMLInputElement>(null);
-  const fieldError = useRef<HTMLLabelElement>(null);
-  const pending = useRef(false),
+    cvv = useRef<HTMLInputElement>(null),
+    fieldError = useRef<HTMLLabelElement>(null),
+    pending = useRef(false),
     alive = useRef(true);
   const [sdk, setSdk] = useState(false),
-    [sdkError, setSdkError] = useState(false);
-  const [donor, setDonor] = useState(""),
-    [amount, setAmount] = useState(""),
-    [expiry, setExpiry] = useState("");
+    [sdkError, setSdkError] = useState(false),
+    [localDonor, setDonor] = useState(""),
+    [localAmount, setAmount] = useState(""),
+    [expiry, setExpiry] = useState(""),
+    [zip, setZip] = useState("");
   const [consent, setConsent] = useState(false),
-    [key, setKey] = useState("");
-  const [stage, setStage] = useState("checking"),
+    [saveCard, setSaveCard] = useState(false),
+    [key, setKey] = useState(""),
+    [stage, setStage] = useState("checking"),
     [result, setResult] = useState<Result | null>(null);
+  const [cards, setCards] = useState<SavedCard[]>([]),
+    [selected, setSelected] = useState("new"),
+    [cardsError, setCardsError] = useState("");
+  const donor = embedded?.donor ?? localDonor,
+    amount = embedded?.amount ?? localAmount;
   const clearTokens = () => {
     if (card.current) card.current.value = "";
     if (cvv.current) cvv.current.value = "";
@@ -44,12 +74,12 @@ export function SolaLivePayment({
   const check = async (requestKey: string) => {
     setStage("checking");
     try {
-      const response = await fetch(
-        `/api/sola/payments?request_key=${encodeURIComponent(requestKey)}`,
+      const r = await fetch(
+        `${endpoint}?request_key=${encodeURIComponent(requestKey)}`,
         { cache: "no-store" },
       );
-      if (!response.ok) throw new Error();
-      const data = await response.json();
+      if (!r.ok) throw new Error();
+      const data = await r.json();
       if (!alive.current) return;
       if (data.state === "not_started") {
         setStage("entry");
@@ -63,8 +93,7 @@ export function SolaLivePayment({
         setStage("result");
         setResult({
           state: "unknown",
-          error:
-            "Unable to check the previous attempt. Do not submit another charge; check Sola or try checking status again.",
+          error: `Unable to check the previous ${saving ? "card save" : "payment"}. Do not submit again; check status or the Sola portal.`,
         });
       }
     }
@@ -72,18 +101,18 @@ export function SolaLivePayment({
   useEffect(() => {
     alive.current = true;
     try {
-      const stored = sessionStorage.getItem(storageKey);
-      const requestKey =
-        stored && /^[a-f0-9-]{36}$/i.test(stored)
-          ? stored
-          : crypto.randomUUID();
+      const stored = sessionStorage.getItem(storageKey),
+        requestKey =
+          stored && /^[a-f0-9-]{36}$/i.test(stored)
+            ? stored
+            : crypto.randomUUID();
       sessionStorage.setItem(storageKey, requestKey);
       setKey(requestKey);
       void check(requestKey);
     } catch {
       setResult({
         state: "unknown",
-        error: "Enable browser session storage before using card processing.",
+        error: "Enable browser session storage before continuing.",
       });
       setStage("result");
     }
@@ -91,7 +120,31 @@ export function SolaLivePayment({
       alive.current = false;
       clearTokens();
     };
-  }, []); // Only the non-sensitive request UUID is retained across reloads.
+  }, []);
+  useEffect(() => {
+    let active = true;
+    setCards([]);
+    setSelected("new");
+    setCardsError("");
+    if (!vaultEnabled || !donor || saving) return;
+    fetch(`/api/sola/cards?donor=${encodeURIComponent(donor)}`, {
+      cache: "no-store",
+    })
+      .then(async (r) => {
+        if (!r.ok) throw new Error();
+        const body = await r.json();
+        if (active) setCards(body.cards ?? []);
+      })
+      .catch(() => {
+        if (active)
+          setCardsError(
+            "Saved cards could not be loaded. You can enter a new card.",
+          );
+      });
+    return () => {
+      active = false;
+    };
+  }, [donor, vaultEnabled, saving]);
   const init = () => {
     if (!window.setAccount || !window.getTokens) {
       setSdkError(true);
@@ -104,54 +157,107 @@ export function SolaLivePayment({
       setSdkError(true);
     }
   };
-  const charge = async (event: React.FormEvent<HTMLFormElement>) => {
+  const submit = async (event: { preventDefault: () => void }) => {
     event.preventDefault();
-    if (pending.current || stage !== "entry" || !sdk || !key) return;
-    if (!/^\d{1,9}(\.\d{1,2})?$/.test(amount)) return;
-    const [whole, part = ""] = amount.split(".");
-    const minor = Number(whole) * 100 + Number(part.padEnd(2, "0"));
-    if (minor < 1 || minor > limit || !consent || !donor) return;
+    if (
+      pending.current ||
+      stage !== "entry" ||
+      !key ||
+      !donor ||
+      !consent ||
+      (selected === "new" && !sdk)
+    )
+      return;
+    if (!saving && !/^\d{1,9}(\.\d{1,2})?$/.test(amount)) return;
+    const [whole, part = ""] = amount.split("."),
+      minor = Number(whole || 0) * 100 + Number(part.padEnd(2, "0"));
+    if (!saving && (minor < 1 || minor > limit)) {
+      setResult({
+        state: "not_started",
+        error: `Enter an amount between $0.01 and $${(limit / 100).toFixed(2)}.`,
+      });
+      return;
+    }
+    if (
+      selected === "new" &&
+      (!/^(0[1-9]|1[0-2])\d{2}$/.test(expiry) ||
+        (zip && !/^\d{5}(?:-\d{4})?$/.test(zip)))
+    ) {
+      setResult({
+        state: "not_started",
+        error: "Enter expiration as MMYY and a valid ZIP code, if supplied.",
+      });
+      return;
+    }
+    const context = embedded?.beforeSubmit();
+    if (embedded && !context) return;
     pending.current = true;
+    embedded?.onBusy?.(true);
     setStage("submitting");
     setResult(null);
     clearTokens();
-    try {
-      await new Promise<void>((resolve, reject) =>
-        window.getTokens!(resolve, () => reject(new Error()), 30000),
-      );
-    } catch {
-      clearTokens();
-      pending.current = false;
-      if (alive.current) {
-        setStage("entry");
-        setResult({
-          state: "not_started",
-          error:
-            "Secure card entry did not complete. No payment request was submitted.",
-        });
+    let cardToken = "",
+      cvvToken = "";
+    if (selected === "new") {
+      try {
+        await new Promise<void>((resolve, reject) =>
+          window.getTokens!(resolve, () => reject(new Error()), 30000),
+        );
+      } catch {
+        clearTokens();
+        pending.current = false;
+        embedded?.onBusy?.(false);
+        if (alive.current) {
+          setStage("entry");
+          setResult({
+            state: "not_started",
+            error:
+              "Secure fields did not complete. No provider request was submitted.",
+          });
+        }
+        return;
       }
-      return;
-    }
-    const cardToken = card.current?.value ?? "",
+      cardToken = card.current?.value ?? "";
       cvvToken = cvv.current?.value ?? "";
-    clearTokens();
+      clearTokens();
+    }
     if (!alive.current) {
       pending.current = false;
+      embedded?.onBusy?.(false);
       return;
     }
     try {
-      const response = await fetch("/api/sola/payments", {
+      const body = saving
+        ? {
+            organization: context?.organization,
+            donor,
+            request_key: key,
+            card_token: cardToken,
+            cvv_token: cvvToken,
+            expiry,
+            ...(zip ? { zip } : {}),
+            save_consent: true,
+          }
+        : {
+            donor,
+            amount_minor: minor,
+            request_key: key,
+            consent: true,
+            ...(context ?? {}),
+            ...(selected !== "new"
+              ? { saved_card: selected }
+              : {
+                  card_token: cardToken,
+                  cvv_token: cvvToken,
+                  expiry,
+                  ...(zip ? { zip } : {}),
+                  ...(saveCard ? { save_card: true, save_consent: true } : {}),
+                }),
+          };
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          donor,
-          amount_minor: minor,
-          expiry,
-          request_key: key,
-          card_token: cardToken,
-          cvv_token: cvvToken,
-          consent: true,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await response.json();
       if (alive.current) {
@@ -164,18 +270,23 @@ export function SolaLivePayment({
               },
         );
         setStage("result");
+        if (data.state) void embedded?.onRecorded().catch(() => {});
       }
     } catch {
       if (alive.current) {
+        setStage("result");
         setResult({
           state: "unknown",
-          error:
-            "Connection lost. The card may have been charged. Check status; do not submit again.",
+          error: saving
+            ? "Connection lost. Check the card-save status before trying again. No charge was requested."
+            : "Connection lost. The card may have been charged. Check status; do not submit again.",
         });
-        setStage("result");
       }
     } finally {
+      cardToken = "";
+      cvvToken = "";
       pending.current = false;
+      embedded?.onBusy?.(false);
     }
   };
   const reset = () => {
@@ -189,194 +300,279 @@ export function SolaLivePayment({
     setKey(requestKey);
     setSdk(false);
     setExpiry("");
+    setZip("");
     setConsent(false);
+    setSaveCard(false);
+    setSelected("new");
     setResult(null);
     setStage("entry");
     clearTokens();
   };
+  const FormTag = embedded ? "div" : "form";
   return (
-    <section>
+    <section className="sola-inline-card">
       <p className="notice">
-        <strong>LIVE card payment.</strong> The Charge button charges a real
-        card. Initial limit:{" "}
-        {(limit / 100).toLocaleString("en-US", {
-          style: "currency",
-          currency: "USD",
-        })}{" "}
-        per payment. No recurring payment or stored card will be created.
-      </p>
-      <p>
-        Unallocated funds become donor credit. After approval, open the payment
-        to allocate it to pledges and generate a receipt.
+        <strong>
+          {saving ? "Save card securely — no charge." : "LIVE card payment."}
+        </strong>
+        {!saving && (
+          <>
+            {" "}
+            The Charge button charges a real card. Limit:{" "}
+            {(limit / 100).toLocaleString("en-US", {
+              style: "currency",
+              currency: "USD",
+            })}{" "}
+            per payment.
+          </>
+        )}{" "}
+        No automatic or recurring payment is authorized.
       </p>
       {sdkError && (
         <p role="alert">
-          Sola secure fields could not load. Check the iFields key, allowed
-          domain and connectivity.
+          Secure fields could not load. Check the iFields key, allowed domain
+          and connectivity.
         </p>
       )}
+      {cardsError && <p role="alert">{cardsError}</p>}
       {stage !== "result" && (
-        <>
-          <Script
-            src={`${IFIELDS_BASE}/ifields.min.js`}
-            strategy="afterInteractive"
-            onReady={init}
-            onError={() => setSdkError(true)}
-          />
-          <form onSubmit={charge} method="post" autoComplete="off">
-            <fieldset
-              disabled={stage !== "entry" || pending.current}
-              style={{ border: 0, padding: 0 }}
-            >
+        <FormTag
+          {...(!embedded ? { onSubmit: submit, method: "post" } : {})}
+          autoComplete="off"
+        >
+          <fieldset
+            disabled={stage !== "entry" || pending.current}
+            style={{ border: 0, padding: 0 }}
+          >
+            {!embedded && (
+              <>
+                <label>
+                  Donor
+                  <select
+                    aria-label="Donor"
+                    required
+                    value={donor}
+                    onChange={(e) => setDonor(e.target.value)}
+                  >
+                    <option value="">Select donor</option>
+                    {donors.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Amount (USD)
+                  <input
+                    type="number"
+                    min="0.01"
+                    max={limit / 100}
+                    step="0.01"
+                    required
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                  />
+                </label>
+              </>
+            )}
+            {!saving && cards.length > 0 && (
               <label>
-                Donor
+                Card to use
                 <select
-                  aria-label="Donor"
-                  required
-                  value={donor}
-                  onChange={(e) => setDonor(e.target.value)}
+                  aria-label="Card to use"
+                  value={selected}
+                  onChange={(e) => {
+                    setSelected(e.target.value);
+                    setConsent(false);
+                    setSaveCard(false);
+                    setSdk(false);
+                    clearTokens();
+                  }}
                 >
-                  <option value="">Select donor</option>
-                  {donors.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
+                  <option value="new">Enter a new card</option>
+                  {cards.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.brand} •••• {c.last4} · {c.expiry.slice(0, 2)}/
+                      {c.expiry.slice(2)}
                     </option>
                   ))}
                 </select>
               </label>
-              <label>
-                Amount (USD)
-                <input
-                  type="number"
-                  min="0.01"
-                  max={limit / 100}
-                  step="0.01"
-                  required
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+            )}
+            {selected === "new" ? (
+              <>
+                <Script
+                  key={key}
+                  src={`${IFIELDS_BASE}/ifields.min.js`}
+                  strategy="afterInteractive"
+                  onReady={init}
+                  onError={() => setSdkError(true)}
                 />
-              </label>
-              <label htmlFor="live-sola-card">
-                Card number — securely hosted by Sola
-              </label>
-              <iframe
-                id="live-sola-card"
-                inert={stage !== "entry"}
-                title="Secure card number"
-                data-ifields-id="card-number"
-                data-ifields-placeholder="Card number"
-                src={`${IFIELDS_BASE}/ifield.htm`}
-                style={{
-                  width: "100%",
-                  height: 48,
-                  border: "1px solid #c9d0c4",
-                  borderRadius: 7,
-                }}
-              />
-              <label>
-                Expiration (MMYY)
-                <input
-                  required
-                  inputMode="numeric"
-                  pattern="(0[1-9]|1[0-2])[0-9]{2}"
-                  maxLength={4}
-                  value={expiry}
-                  onChange={(e) => setExpiry(e.target.value)}
-                  placeholder="MMYY"
+                <label htmlFor="live-sola-card">
+                  Card number — securely hosted by Sola
+                </label>
+                <iframe
+                  id="live-sola-card"
+                  inert={stage !== "entry"}
+                  title="Secure card number"
+                  data-ifields-id="card-number"
+                  data-ifields-placeholder="Card number"
+                  src={`${IFIELDS_BASE}/ifield.htm`}
+                  className="sola-hosted-field"
                 />
-              </label>
-              <label htmlFor="live-sola-cvv">
-                Security code — securely hosted by Sola
-              </label>
-              <iframe
-                id="live-sola-cvv"
-                inert={stage !== "entry"}
-                title="Secure security code"
-                data-ifields-id="cvv"
-                data-ifields-placeholder="CVV"
-                src={`${IFIELDS_BASE}/ifield.htm`}
-                style={{
-                  width: "100%",
-                  height: 48,
-                  border: "1px solid #c9d0c4",
-                  borderRadius: 7,
-                }}
-              />
-              <input
-                type="hidden"
-                name="xCardNum"
-                data-ifields-id="card-number-token"
-                ref={card}
-              />
-              <input
-                type="hidden"
-                name="xCVV"
-                data-ifields-id="cvv-token"
-                ref={cvv}
-              />
-              <div hidden>
-                <label ref={fieldError} data-ifields-id="card-data-error" />
-              </div>
-              <label>
+                <div className="form-grid">
+                  <label>
+                    Expiration (MMYY)
+                    <input
+                      required
+                      inputMode="numeric"
+                      pattern="(0[1-9]|1[0-2])[0-9]{2}"
+                      maxLength={4}
+                      value={expiry}
+                      onChange={(e) => setExpiry(e.target.value)}
+                      placeholder="MMYY"
+                    />
+                  </label>
+                  <label>
+                    ZIP code
+                    <input
+                      inputMode="numeric"
+                      pattern="[0-9]{5}(-[0-9]{4})?"
+                      maxLength={10}
+                      value={zip}
+                      onChange={(e) => setZip(e.target.value)}
+                      placeholder="ZIP code"
+                    />
+                  </label>
+                </div>
+                <label htmlFor="live-sola-cvv">
+                  Security code — securely hosted by Sola
+                </label>
+                <iframe
+                  id="live-sola-cvv"
+                  inert={stage !== "entry"}
+                  title="Secure security code"
+                  data-ifields-id="cvv"
+                  data-ifields-placeholder="CVV"
+                  src={`${IFIELDS_BASE}/ifield.htm`}
+                  className="sola-hosted-field"
+                />
                 <input
-                  type="checkbox"
-                  required
-                  checked={consent}
-                  onChange={(e) => setConsent(e.target.checked)}
-                  style={{ width: "auto" }}
-                />{" "}
-                I have the cardholder’s permission to charge this amount once.
-              </label>
-              <button
-                type="submit"
-                disabled={!sdk || !consent || !donor || stage !== "entry"}
-              >
-                {stage === "submitting"
-                  ? "Submitting — do not retry…"
+                  type="hidden"
+                  name="xCardNum"
+                  data-ifields-id="card-number-token"
+                  ref={card}
+                />
+                <input
+                  type="hidden"
+                  name="xCVV"
+                  data-ifields-id="cvv-token"
+                  ref={cvv}
+                />
+                <div hidden>
+                  <label ref={fieldError} data-ifields-id="card-data-error" />
+                </div>
+                {!saving && vaultEnabled && (
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={saveCard}
+                      onChange={(e) => setSaveCard(e.target.checked)}
+                    />
+                    Save card to donor file — the cardholder agrees to secure
+                    storage for future donations.
+                  </label>
+                )}
+              </>
+            ) : (
+              <p>
+                Using {cards.find((c) => c.id === selected)?.brand} ending{" "}
+                {cards.find((c) => c.id === selected)?.last4}. No CVV is stored.
+              </p>
+            )}
+            <label className="check-label">
+              <input
+                type="checkbox"
+                required
+                checked={consent}
+                onChange={(e) => setConsent(e.target.checked)}
+              />{" "}
+              {saving
+                ? "I have the cardholder’s permission to save this card to this donor’s file for future donations."
+                : "I have the cardholder’s permission to charge this amount once."}
+            </label>
+            <button
+              type={embedded ? "button" : "submit"}
+              onClick={embedded ? submit : undefined}
+              disabled={
+                (selected === "new" && !sdk) ||
+                !consent ||
+                !donor ||
+                stage !== "entry"
+              }
+            >
+              {stage === "submitting"
+                ? "Submitting — do not retry…"
+                : saving
+                  ? "Save card to donor file"
                   : `Charge ${Number(amount || 0).toLocaleString("en-US", { style: "currency", currency: "USD" })}`}
-              </button>
-            </fieldset>
-          </form>
-        </>
+            </button>
+          </fieldset>
+        </FormTag>
       )}
       {stage === "checking" && (
-        <p role="status">Checking the saved payment attempt…</p>
+        <p role="status">
+          Checking the saved {saving ? "card-save" : "payment"} attempt…
+        </p>
       )}
       {stage === "submitting" && (
         <p role="status">
-          Submitting once. Do not refresh or start another payment.
+          Submitting once. Do not refresh or start another attempt.
         </p>
       )}
       {key && (
         <p className="muted">
-          Payment attempt / Sola invoice: <code>{key}</code>
+          {saving ? "Card-save attempt" : "Payment attempt / Sola invoice"}:{" "}
+          <code>{key}</code>
         </p>
       )}
       {result && (
         <section role="status" aria-live="polite">
           <h2>
             {result.state === "approved"
-              ? "Payment approved and recorded"
+              ? saving
+                ? "Card saved to donor file"
+                : "Payment approved and recorded"
               : result.state === "declined"
                 ? "Card declined"
                 : result.state === "not_started"
                   ? "Payment not submitted"
-                  : "Payment needs review — do not retry"}
+                  : saving
+                    ? "Card save needs review — do not retry"
+                    : "Payment needs review — do not retry"}
           </h2>
           {result.error && <p>{result.error}</p>}
           {result.reference && <p>Sola reference: {result.reference}</p>}
+          {result.card_saved && !saving && (
+            <p>Card saved to this donor’s file.</p>
+          )}
+          {result.save_error && (
+            <p role="alert">
+              Payment succeeded, but the card was not saved. Do not charge again
+              to save it. Use Add card on the donor’s profile.
+            </p>
+          )}
           {result.allocation_review && (
             <p>
-              The payment is recorded as donor credit. Its pledge allocations
+              Received money is recorded as donor credit. Pledge allocations
               need review.
             </p>
           )}
-          {result.state === "approved" && (
-            <p>
-              <Link href="/dashboard?page=payments">
-                Open payments to allocate funds and create the receipt →
-              </Link>
-            </p>
+          {result.state === "approved" && !embedded && !saving && (
+            <Link href="/dashboard?page=payments">
+              Open payments and receipt →
+            </Link>
           )}
           {stage === "result" && (
             <button type="button" onClick={() => void check(key)}>
@@ -385,14 +581,15 @@ export function SolaLivePayment({
           )}
           {["approved", "declined"].includes(result.state) && (
             <button type="button" onClick={reset}>
-              Start another payment
+              {saving ? "Add another card" : "Start another payment"}
             </button>
           )}
         </section>
       )}
       <p className="muted">
-        A timeout, error or 3DS challenge is kept pending for review. No
-        automatic retry, refund, void or recurring operation is supported.
+        Card numbers and CVV stay in Sola-hosted fields. Only encrypted provider
+        tokens and masked card details are saved with permission. Uncertain
+        responses are never retried automatically.
       </p>
     </section>
   );

@@ -687,7 +687,7 @@ export function tableView(
         date: String(snap.paid_on),
         amount: currency(snap.amount_minor),
         language: r.language === "he" ? "Hebrew" : "English",
-        status: "Print-ready · not emailed",
+        status: r.voided_at ? "Voided" : "Print-ready · not emailed",
       };
     });
   } else if (page === "donor_accounts") {

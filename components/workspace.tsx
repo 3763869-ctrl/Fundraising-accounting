@@ -62,6 +62,8 @@ import {
   type Command,
 } from "@/lib/workspace/domain";
 import { pageTitles, tableView } from "@/lib/workspace/views";
+import { VoidCashForm } from "./void-cash-form";
+import { DonorSavedCards } from "./donor-saved-cards";
 import { RowMenu } from "./row-menu";
 import { DonationForm } from "./donation-form";
 import { DonationEdit } from "./donation-edit";
@@ -637,6 +639,11 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
               </div>
             </div>
           </div>
+          <DonorSavedCards
+            organization={data.organization.id}
+            donor={row.id}
+            demo={demo}
+          />
           {stats([
             ["Pledged", totals.pledged],
             ["Paid", totals.paid],
@@ -883,6 +890,37 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
               </button>
             </div>
           )}
+          {row.status === "voided" && (
+            <div className="notice">
+              <strong>VOIDED CASH PAYMENT</strong>
+              <p>
+                {String(row.void_date)} · {String(row.void_reason)}
+              </p>
+              {receipt && (
+                <button
+                  className="text-button"
+                  onClick={() =>
+                    setDetail({ kind: "receipts", id: receipt.id })
+                  }
+                >
+                  View voided receipt
+                </button>
+              )}
+            </div>
+          )}
+          {financeWritable &&
+            row.method === "cash" &&
+            row.status !== "voided" && (
+              <button
+                className="danger-button"
+                onClick={() => {
+                  setDetail(null);
+                  setForm({ kind: "cash_void", preset: row });
+                }}
+              >
+                Void cash payment
+              </button>
+            )}
           <h3>Pledge allocations</h3>
           {allocations.map((a) => {
             const pledge = t.pledges.find((p) => p.id === a.pledge_id);
@@ -1704,13 +1742,6 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                     </p>
                   )}
 
-                  {page === "payments" && !demo && (
-                    <p>
-                      <a href="/payments/card">
-                        Charge a card securely with Sola →
-                      </a>
-                    </p>
-                  )}
                   {page === "payments" && (
                     <div
                       className="view-tabs"
@@ -1722,6 +1753,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                         "processed",
                         "pending",
                         "failed",
+                        "voided",
                         "undeposited",
                         "upcoming",
                       ].map((tab) => (
@@ -1803,6 +1835,22 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                                 >
                                   Open Donor
                                 </button>
+                                {page === "payments" &&
+                                  financeWritable &&
+                                  r.method === "cash" &&
+                                  r.status !== "voided" && (
+                                    <button
+                                      className="text-button"
+                                      onClick={() =>
+                                        setForm({
+                                          kind: "cash_void",
+                                          preset: r,
+                                        })
+                                      }
+                                    >
+                                      Void cash payment
+                                    </button>
+                                  )}
                                 {page === "pledges" && (
                                   <>
                                     <button
@@ -1916,27 +1964,38 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       {form && (
         <Modal
           title={
-            form.kind === "donation_edit"
-              ? "Edit donation"
-              : form.kind === "donors"
-                ? "Add New Donor"
-                : form.kind === "donor_edit"
-                  ? "Edit donor"
-                  : form.kind === "organization_update"
-                    ? "Edit organization"
-                    : form.kind === "batch"
-                      ? "Batch payment entry"
-                      : form.kind === "allocate"
-                        ? "Allocate donor credit"
-                        : `Add ${form.kind === "payment" ? "payment" : form.kind === "schedule" ? "payment plan" : form.kind.replaceAll("_", " ").replace(/s$/, "")}`
+            form.kind === "cash_void"
+              ? "Void cash payment"
+              : form.kind === "donation_edit"
+                ? "Edit donation"
+                : form.kind === "donors"
+                  ? "Add New Donor"
+                  : form.kind === "donor_edit"
+                    ? "Edit donor"
+                    : form.kind === "organization_update"
+                      ? "Edit organization"
+                      : form.kind === "batch"
+                        ? "Batch payment entry"
+                        : form.kind === "allocate"
+                          ? "Allocate donor credit"
+                          : `Add ${form.kind === "payment" ? "payment" : form.kind === "schedule" ? "payment plan" : form.kind.replaceAll("_", " ").replace(/s$/, "")}`
           }
           onClose={() => setForm(null)}
         >
-          {form.kind === "payment" && !form.preset?.installment ? (
+          {form.kind === "cash_void" ? (
+            <VoidCashForm
+              row={form.preset as Row}
+              onSave={save}
+              onClose={() => setForm(null)}
+            />
+          ) : form.kind === "payment" && !form.preset?.installment ? (
             <DonationForm
               data={data}
               preset={form.preset}
               demo={demo}
+              onRecorded={async () => {
+                setData(await loadWorkspace(demo));
+              }}
               onSave={save}
               onClose={() => setForm(null)}
             />
@@ -2007,7 +2066,7 @@ function PlannedPage({ page, data }: { page: string; data: WorkspaceData }) {
     ? [
         [
           "Sola (formerly Cardknox)",
-          "Live keys are stored separately in deployment settings. Secure-field sandbox setup is available; live processing remains disabled.",
+          "Owner-only live card entry and saved cards are available in New payment. Merchant binding and secure deployment settings are required.",
         ],
         [
           "Matbeya / OJZ",

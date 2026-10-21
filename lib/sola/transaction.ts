@@ -1,7 +1,9 @@
+import { cardFromResponse, validVaultToken, type StoredCard } from "./vault.ts";
 export const SOLA_TRANSACTION_URL = "https://x1.cardknox.com/gatewayjson";
 export type SolaOutcome = {
   state: "approved" | "declined" | "unknown";
   reference: string | null;
+  card?: StoredCard;
 };
 
 export function usdAmount(minor: number): string {
@@ -60,14 +62,17 @@ export function interpretSolaResponse(
   };
 }
 
-// No retries, failover, card-on-file saves or recurring commands. The caller must
+// No retries, failover or recurring commands. The caller must
 // durably reserve an attempt before calling this server-only transport helper.
 export async function submitSolaSale(
   input: {
     key: string;
     amountMinor: number;
-    cardToken: string;
-    cvvToken: string;
+    cardToken?: string;
+    cvvToken?: string;
+    savedToken?: string;
+    saveCard?: boolean;
+    zip?: string;
     expiry: string;
     invoice: string;
   },
@@ -75,8 +80,10 @@ export async function submitSolaSale(
 ): Promise<SolaOutcome> {
   if (
     !input.key ||
-    !validSut(input.cardToken) ||
-    !validSut(input.cvvToken) ||
+    !(input.savedToken
+      ? validVaultToken(input.savedToken) && !input.cardToken && !input.cvvToken
+      : validSut(input.cardToken) && validSut(input.cvvToken)) ||
+    (input.zip !== undefined && !/^\d{5}(?:-\d{4})?$/.test(input.zip)) ||
     !validExpiry(input.expiry) ||
     !/^[a-f0-9-]{36}$/i.test(input.invoice)
   )
@@ -96,8 +103,10 @@ export async function submitSolaSale(
         xSoftwareVersion: "0.1.0",
         xCommand: "cc:sale",
         xAmount: amount,
-        xCardNum: input.cardToken,
-        xCVV: input.cvvToken,
+        ...(input.savedToken
+          ? { xToken: input.savedToken }
+          : { xCardNum: input.cardToken, xCVV: input.cvvToken }),
+        ...(input.zip ? { xZip: input.zip } : {}),
         xExp: input.expiry,
         xInvoice: input.invoice,
       }),
@@ -105,7 +114,68 @@ export async function submitSolaSale(
     if (!response.ok) return { state: "unknown", reference: null };
     const text = await response.text();
     if (text.length > 65536) return { state: "unknown", reference: null };
-    return interpretSolaResponse(JSON.parse(text), input.amountMinor);
+    const body = JSON.parse(text),
+      result = interpretSolaResponse(body, input.amountMinor);
+    const card =
+      input.saveCard && result.state === "approved"
+        ? cardFromResponse(body, input.expiry)
+        : null;
+    return card ? { ...result, card } : result;
+  } catch {
+    return { state: "unknown", reference: null };
+  }
+}
+
+// Non-charging token creation, only after the server reserves a save attempt.
+export async function submitSolaCardSave(
+  input: {
+    key: string;
+    cardToken: string;
+    cvvToken: string;
+    expiry: string;
+    invoice: string;
+    zip?: string;
+  },
+  transport: typeof fetch = fetch,
+): Promise<SolaOutcome> {
+  if (
+    !input.key ||
+    !validSut(input.cardToken) ||
+    !validSut(input.cvvToken) ||
+    !validExpiry(input.expiry) ||
+    !/^[a-f0-9-]{36}$/i.test(input.invoice) ||
+    (input.zip !== undefined && !/^\d{5}(?:-\d{4})?$/.test(input.zip))
+  )
+    throw new Error("Invalid secure card request.");
+  try {
+    const response = await transport(SOLA_TRANSACTION_URL, {
+      method: "POST",
+      cache: "no-store",
+      redirect: "error",
+      signal: AbortSignal.timeout(20000),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        xKey: input.key,
+        xVersion: "5.0.0",
+        xSoftwareName: "Cedar & Olive",
+        xSoftwareVersion: "0.1.0",
+        xCommand: "cc:save",
+        xCardNum: input.cardToken,
+        xCVV: input.cvvToken,
+        xExp: input.expiry,
+        xInvoice: input.invoice,
+        ...(input.zip ? { xZip: input.zip } : {}),
+      }),
+    });
+    if (!response.ok) return { state: "unknown", reference: null };
+    const text = await response.text();
+    if (text.length > 65536) return { state: "unknown", reference: null };
+    const body = JSON.parse(text);
+    if (body?.xResult === "D") return { state: "declined", reference: null };
+    const card = cardFromResponse(body, input.expiry);
+    return card
+      ? { state: "approved", reference: null, card }
+      : { state: "unknown", reference: null };
   } catch {
     return { state: "unknown", reference: null };
   }

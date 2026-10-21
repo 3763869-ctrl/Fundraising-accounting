@@ -14,6 +14,11 @@ export function Receipt({ receipt, demo }: { receipt: Row; demo: boolean }) {
         <small>Document generated · no email has been sent</small>
       </div>
       <article className="receipt-document" dir={hebrew ? "rtl" : "ltr"}>
+        {Boolean(receipt.voided_at) && (
+          <div className="receipt-void">
+            <strong>VOID — this payment receipt is no longer valid</strong>
+          </div>
+        )}
         <div className="receipt-brand">Cedar & Olive</div>
         {demo && (
           <div className="sample-watermark">SAMPLE — NOT A TAX RECEIPT</div>

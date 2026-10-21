@@ -5,6 +5,8 @@ import {
   liveConfigured,
   liveLimit,
 } from "@/lib/sola/server";
+import { cardContext, openToken } from "@/lib/sola/vault";
+import { encryptedCard, vaultConfigured } from "@/lib/sola/card-server";
 import { validExpiry, validSut, submitSolaSale } from "@/lib/sola/transaction";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -24,7 +26,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await identity.db
     .from("sola_payment_attempts")
     .select(
-      "state,payment_id,provider_reference,allocation_review,amount_minor,donor_id",
+      "state,payment_id,provider_reference,allocation_review,amount_minor,donor_id,card_saved,save_error",
     )
     .eq("organization_id", identity.org)
     .eq("request_key", key)
@@ -45,6 +47,8 @@ export async function GET(request: NextRequest) {
         allocation_review: data.allocation_review,
         amount_minor: data.amount_minor,
         donor: data.donor_id,
+        card_saved: data.card_saved,
+        save_error: data.save_error,
       })
     : reply({ state: "not_started" });
 }
@@ -57,6 +61,8 @@ export async function POST(request: NextRequest) {
   if (!identity)
     return reply({ error: "Sign in as the configured merchant owner." }, 403);
   let input: Record<string, unknown>;
+  let savedToken: string | undefined;
+  let savedExpiry: string | undefined;
   try {
     if (
       !request.headers.get("content-type")?.includes("application/json") ||
@@ -75,6 +81,12 @@ export async function POST(request: NextRequest) {
       "expiry",
       "consent",
       "allocations",
+      "organization",
+      "donation",
+      "saved_card",
+      "save_card",
+      "save_consent",
+      "zip",
     ];
     if (
       !input ||
@@ -90,9 +102,21 @@ export async function POST(request: NextRequest) {
       Number(input.amount_minor) < 1 ||
       Number(input.amount_minor) > liveLimit() ||
       input.consent !== true ||
-      !validSut(input.card_token) ||
-      !validSut(input.cvv_token) ||
-      !validExpiry(input.expiry)
+      (input.organization !== undefined &&
+        input.organization !== identity.org) ||
+      (input.saved_card
+        ? !uuid.test(String(input.saved_card)) ||
+          input.card_token !== undefined ||
+          input.cvv_token !== undefined ||
+          input.expiry !== undefined ||
+          input.save_card === true
+        : !validSut(input.card_token) ||
+          !validSut(input.cvv_token) ||
+          !validExpiry(input.expiry)) ||
+      (input.save_card !== undefined && typeof input.save_card !== "boolean") ||
+      (input.save_card === true &&
+        (input.save_consent !== true || !vaultConfigured())) ||
+      (input.zip !== undefined && !/^\d{5}(?:-\d{4})?$/.test(String(input.zip)))
     )
       throw new Error();
     if (
@@ -100,6 +124,37 @@ export async function POST(request: NextRequest) {
       (!Array.isArray(input.allocations) || input.allocations.length > 100)
     )
       throw new Error();
+    if (input.donation !== undefined) {
+      const d = input.donation as Record<string, unknown>;
+      if (
+        !d ||
+        typeof d !== "object" ||
+        Array.isArray(d) ||
+        Object.keys(d).some(
+          (k) =>
+            ![
+              "campaign_id",
+              "fundraiser_id",
+              "sponsorship_id",
+              "event_id",
+              "description",
+              "collector",
+              "credit_confirmed",
+            ].includes(k),
+        ) ||
+        !uuid.test(String(d.campaign_id)) ||
+        ["fundraiser_id", "sponsorship_id", "event_id"].some(
+          (k) =>
+            d[k] !== null && d[k] !== undefined && !uuid.test(String(d[k])),
+        ) ||
+        typeof d.description !== "string" ||
+        d.description.length > 10000 ||
+        typeof d.collector !== "string" ||
+        d.collector.length > 200 ||
+        typeof d.credit_confirmed !== "boolean"
+      )
+        throw new Error();
+    }
     for (const allocation of (input.allocations ?? []) as Record<
       string,
       unknown
@@ -126,14 +181,52 @@ export async function POST(request: NextRequest) {
       400,
     );
   }
+  if (input.saved_card) {
+    if (!vaultConfigured())
+      return reply({ error: "Card vault is not configured." }, 503);
+    const admin = solaAdmin();
+    const { data: method, error } = await admin
+      .from("donor_payment_methods")
+      .select("id,expiry")
+      .eq("id", input.saved_card)
+      .eq("organization_id", identity.org)
+      .eq("donor_id", input.donor)
+      .eq("active", true)
+      .maybeSingle();
+    if (error || !method || !validExpiry(method.expiry))
+      return reply({ error: "Saved card is unavailable or expired." }, 400);
+    const { data: secret } = await admin
+      .from("sola_card_tokens")
+      .select("encrypted_token")
+      .eq("method_id", method.id)
+      .eq("organization_id", identity.org)
+      .maybeSingle();
+    try {
+      if (!secret) throw new Error();
+      savedToken = openToken(
+        secret.encrypted_token,
+        process.env.SOLA_CARD_VAULT_KEY!,
+        cardContext(identity.org, String(input.donor), method.id),
+      );
+      savedExpiry = method.expiry;
+    } catch {
+      return reply(
+        { error: "Saved card could not be opened. No payment was submitted." },
+        503,
+      );
+    }
+  }
   const { data: prepared, error: preparationError } = await identity.db.rpc(
-    "prepare_sola_payment",
+    "prepare_sola_donation",
     {
       org: identity.org,
       donor: input.donor,
       amount: input.amount_minor,
       request_key: input.request_key,
       allocations: input.allocations ?? [],
+      details: input.donation ?? {},
+      stored_card: input.saved_card ?? null,
+      save_card: input.save_card === true,
     },
   );
   if (preparationError || !prepared)
@@ -148,17 +241,29 @@ export async function POST(request: NextRequest) {
   const result = await submitSolaSale({
     key: process.env.SOLA_API_KEY!,
     amountMinor: Number(prepared.amount_minor),
-    cardToken: String(input.card_token),
-    cvvToken: String(input.cvv_token),
-    expiry: String(input.expiry),
+    ...(savedToken
+      ? { savedToken }
+      : {
+          cardToken: String(input.card_token),
+          cvvToken: String(input.cvv_token),
+        }),
+    expiry: savedExpiry ?? String(input.expiry),
+    saveCard: input.save_card === true,
+    ...(input.zip ? { zip: String(input.zip) } : {}),
     invoice: String(input.request_key),
   });
   const { data: finished, error: finishError } = await solaAdmin().rpc(
-    "finish_sola_payment",
+    "finish_sola_payment_vault",
     {
       attempt: prepared.attempt,
       outcome: result.state,
       reference: result.reference,
+      card: encryptedCard(
+        result.card,
+        identity.org,
+        String(input.donor),
+        prepared.card_method_id,
+      ),
     },
   );
   if (finishError || !finished)

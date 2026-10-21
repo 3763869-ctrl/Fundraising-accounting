@@ -50,3 +50,13 @@ test("live card entry and merchant binding reject signed-out access", async ({
   });
   expect(bind.status()).toBe(403);
 });
+
+
+test("saved-card metadata and inline configuration reject signed-out access", async ({request})=>{
+  const config=await request.get("/api/sola/config?organization=00000000-0000-0000-0000-000000000001");
+  expect(config.status()).toBe(403);expect((await config.json()).ifields_key).toBeUndefined();
+  const cards=await request.get("/api/sola/cards?donor=00000000-0000-0000-0000-000000000001");
+  expect(cards.status()).toBe(403);
+  const remove=await request.delete("/api/sola/cards",{headers:{origin:"https://cedar-olive.vercel.app"},data:{method:"00000000-0000-0000-0000-000000000001"}});
+  expect(remove.status()).toBe(403);
+});
