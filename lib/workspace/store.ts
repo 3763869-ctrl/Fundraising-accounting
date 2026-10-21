@@ -223,6 +223,11 @@ export async function runCommand(
         .from(command.table!)
         .insert({ ...v, organization_id: org });
       break;
+    case "matbia_demo_prepare":
+    case "matbia_demo_finish":
+      throw new Error(
+        "Matbia simulation is available only in the sample workspace.",
+      );
     case "cash_void":
       result = await db.rpc("void_cash_payment", v);
       break;

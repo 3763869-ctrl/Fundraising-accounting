@@ -45,7 +45,9 @@ export function Receipt({ receipt, demo }: { receipt: Row; demo: boolean }) {
         <div className="receipt-amount">{currency(s.amount_minor)}</div>
         <p>
           {hebrew ? "אמצעי תשלום" : "Payment method"}:{" "}
-          {String(s.method).replaceAll("_", " ")}
+          {s.provider === "matbia"
+            ? "Matbia charity card"
+            : String(s.method).replaceAll("_", " ")}
         </p>
         {Boolean(s.reference) && (
           <p>

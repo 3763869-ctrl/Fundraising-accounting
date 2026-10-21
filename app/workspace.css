@@ -2197,3 +2197,16 @@ button:disabled {
     color: black !important;
   }
 }
+.matbia-panel {
+  border: 1px solid #dbd4e9;
+  background: #f7f5fb;
+  border-radius: 10px;
+  padding: 20px;
+  margin-top: 16px;
+}
+.matbia-panel button {
+  margin: 8px 8px 0 0;
+}
+.matbia-panel code {
+  overflow-wrap: anywhere;
+}

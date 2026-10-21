@@ -47,7 +47,11 @@ test("pledge allocation, explicit credit confirmation, paid archive, editable ca
   await expect(
     page.getByRole("columnheader", { name: "Donor Email", exact: true }),
   ).toBeVisible();
+  const layoutsBefore = await page.evaluate(()=>Object.entries(localStorage).filter(([key])=>key.endsWith("-columns")));
+  expect(layoutsBefore.map(([,value])=>JSON.parse(value)[0])).toContain("donor");
   await page.reload();
+  const layoutsAfter = await page.evaluate(()=>Object.entries(localStorage).filter(([key])=>key.endsWith("-columns")));
+  expect(layoutsAfter).toEqual(layoutsBefore);
   await expect(page.locator("thead th").nth(1)).toContainText("Donor");
   await page
     .getByRole("textbox", { name: "Search Pledges" })

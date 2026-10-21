@@ -35,3 +35,5 @@ Database tests use embedded PostgreSQL and test real migration functions and pol
 The `uuid` override preserves ExcelJS's CommonJS v4 API while selecting a patched dependency version; the XLSX download is exercised by browser tests.
 
 The `fundraising/` Python app and `tests/test_foundation.py` are retained from the initial local prototype. They are superseded and are not the Vercel backend or the web app's accounting system.
+
+Matbia charity-card setup and sandbox separation: see [MATBIA_SETUP.md](MATBIA_SETUP.md). Live Matbia processing remains disabled pending provider activation.

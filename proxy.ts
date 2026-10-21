@@ -33,5 +33,6 @@ export const config = {
     "/payments/:path*",
     "/settings/:path*",
     "/api/sola/:path*",
+    "/api/matbia/:path*",
   ],
 };

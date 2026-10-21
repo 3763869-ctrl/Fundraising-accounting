@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
+import { MatbiaPayment } from "./matbia-payment";
 import { InlineCardPayment } from "./inline-card-payment";
 import {
   balance,
@@ -34,7 +35,11 @@ export function DonationForm({
     preset.amount_minor ? String(Number(preset.amount_minor) / 100) : "",
   );
   const [allocations, setAllocations] = useState<Record<string, string>>({});
-  const [method, setMethod] = useState("cash");
+  const [method, setMethod] = useState(String(preset.method ?? "cash"));
+  const [charityProvider, setCharityProvider] = useState("matbia");
+  const processing =
+    method === "external_card" ||
+    (method === "charity_card" && charityProvider === "matbia");
   const [status, setStatus] = useState("processed");
   const [creditConfirmed, setCreditConfirmed] = useState(false);
   const [confirmCredit, setConfirmCredit] = useState(false);
@@ -63,6 +68,41 @@ export function DonationForm({
       </select>
     </label>
   );
+  const buildPaymentContext = () => {
+    setError("");
+    try {
+      if (!formRef.current?.reportValidity()) return null;
+      const chosen = Object.entries(allocations)
+        .filter(([, v]) => Number(v) > 0)
+        .map(([pledge_id, v]) => ({
+          pledge_id,
+          amount_minor: cents(v),
+        }));
+      if (chosen.reduce((sum, a) => sum + a.amount_minor, 0) > cents(amount))
+        throw new Error("Allocations exceed the payment amount.");
+      if (open.length && !chosen.length && !creditConfirmed) {
+        setConfirmCredit(true);
+        return null;
+      }
+      const f = new FormData(formRef.current);
+      return {
+        organization: data.organization.id,
+        allocations: chosen,
+        donation: {
+          campaign_id: f.get("campaign_id"),
+          fundraiser_id: f.get("fundraiser_id") || null,
+          sponsorship_id: f.get("sponsorship_id") || null,
+          event_id: f.get("event_id") || null,
+          description: String(f.get("description") || ""),
+          collector: String(f.get("collector") || ""),
+          credit_confirmed: creditConfirmed,
+        },
+      };
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Check donation details.");
+      return null;
+    }
+  };
   return (
     <form
       ref={formRef}
@@ -70,7 +110,7 @@ export function DonationForm({
       className="record-form"
       onSubmit={async (e) => {
         e.preventDefault();
-        if (method === "external_card") return;
+        if (processing) return;
         setError("");
         try {
           const n = cents(amount);
@@ -176,7 +216,7 @@ export function DonationForm({
                 type="date"
                 name="paid_on"
                 required
-                disabled={method === "external_card"}
+                disabled={processing}
                 defaultValue={today()}
               />
             </label>
@@ -329,7 +369,7 @@ export function DonationForm({
                   I confirm: do not apply this payment to any pledge.
                 </label>
                 <p>
-                  Press {method === "external_card" ? "Charge" : "Save payment"}{" "}
+                  Press {processing ? "Charge / Run test" : "Save payment"}{" "}
                   again to continue.
                 </p>
               </div>
@@ -351,9 +391,7 @@ export function DonationForm({
                 }}
               >
                 <option value="external_card">Credit card</option>
-                <option value="charity_card">
-                  Charity card (manual; integration pending)
-                </option>
+                <option value="charity_card">Charity card</option>
                 <option value="cash">Cash</option>
                 <option value="check">Check</option>
                 <option value="zelle">Zelle</option>
@@ -361,7 +399,22 @@ export function DonationForm({
                 <option value="other">Other</option>
               </select>
             </label>
-            {method !== "external_card" && (
+            {method === "charity_card" && (
+              <label>
+                Charity-card provider
+                <select
+                  aria-label="Charity-card provider"
+                  value={charityProvider}
+                  onChange={(e) => setCharityProvider(e.target.value)}
+                >
+                  <option value="matbia">Matbia</option>
+                  <option value="manual">
+                    Other charity card (manual record)
+                  </option>
+                </select>
+              </label>
+            )}
+            {!processing && (
               <label>
                 Status
                 <select
@@ -378,7 +431,7 @@ export function DonationForm({
                 </select>
               </label>
             )}
-            {method !== "external_card" && (
+            {!processing && (
               <label>
                 Reference / check number
                 <input
@@ -401,48 +454,18 @@ export function DonationForm({
               demo={demo}
               onRecorded={onRecorded}
               onBusy={setBusy}
-              beforeSubmit={() => {
-                setError("");
-                try {
-                  if (!formRef.current?.reportValidity()) return null;
-                  const chosen = Object.entries(allocations)
-                    .filter(([, v]) => Number(v) > 0)
-                    .map(([pledge_id, v]) => ({
-                      pledge_id,
-                      amount_minor: cents(v),
-                    }));
-                  if (
-                    chosen.reduce((sum, a) => sum + a.amount_minor, 0) >
-                    cents(amount)
-                  )
-                    throw new Error("Allocations exceed the payment amount.");
-                  if (open.length && !chosen.length && !creditConfirmed) {
-                    setConfirmCredit(true);
-                    return null;
-                  }
-                  const f = new FormData(formRef.current);
-                  return {
-                    organization: data.organization.id,
-                    allocations: chosen,
-                    donation: {
-                      campaign_id: f.get("campaign_id"),
-                      fundraiser_id: f.get("fundraiser_id") || null,
-                      sponsorship_id: f.get("sponsorship_id") || null,
-                      event_id: f.get("event_id") || null,
-                      description: String(f.get("description") || ""),
-                      collector: String(f.get("collector") || ""),
-                      credit_confirmed: creditConfirmed,
-                    },
-                  };
-                } catch (err) {
-                  setError(
-                    err instanceof Error
-                      ? err.message
-                      : "Check donation details.",
-                  );
-                  return null;
-                }
-              }}
+              beforeSubmit={buildPaymentContext}
+            />
+          ) : method === "charity_card" && charityProvider === "matbia" ? (
+            <MatbiaPayment
+              data={data}
+              demo={demo}
+              donor={donor}
+              amount={amount}
+              beforeSubmit={buildPaymentContext}
+              onSave={onSave}
+              onRecorded={onRecorded}
+              onBusy={setBusy}
             />
           ) : (
             <p className="muted">
@@ -460,7 +483,7 @@ export function DonationForm({
           >
             Cancel
           </button>
-          {method !== "external_card" && (
+          {!processing && (
             <button disabled={busy}>{busy ? "Saving…" : "Save payment"}</button>
           )}
         </div>

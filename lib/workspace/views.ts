@@ -571,6 +571,7 @@ export function tableView(
       ...extraColumns,
       id: "Payment ID",
       collector: "Collector",
+      provider: "Payment provider",
       processed: "Processed Status",
     };
     rows = view(t.payments, (p) => ({
@@ -580,6 +581,14 @@ export function tableView(
       fundraiser: name("fundraisers", p.fundraiser_id),
       collector: String(p.collector ?? ""),
       processed: String(p.status),
+      provider:
+        p.provider === "matbia"
+          ? p.environment === "simulation"
+            ? "Matbia · simulated"
+            : "Matbia"
+          : p.provider === "sola"
+            ? "Sola"
+            : "Manual / external",
       donor: name("donors", p.donor_id),
       date: String(p.paid_on),
       amount: currency(p.amount_minor),

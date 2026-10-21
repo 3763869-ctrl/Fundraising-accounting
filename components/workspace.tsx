@@ -855,41 +855,43 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             Reference: {String(row.reference || "None")} ·{" "}
             {String(row.deposit_status)}
           </p>
-          {row.status === "pending" && financeWritable && (
-            <div className="actions">
-              <button
-                disabled={busy}
-                onClick={() =>
-                  act({
-                    type: "payment_status",
-                    values: {
-                      payment: row.id,
-                      new_status: "processed",
-                      dated: today(),
-                    },
-                  })
-                }
-              >
-                Confirm externally received payment
-              </button>
-              <button
-                className="secondary"
-                disabled={busy}
-                onClick={() =>
-                  act({
-                    type: "payment_status",
-                    values: {
-                      payment: row.id,
-                      new_status: "failed",
-                      dated: today(),
-                    },
-                  })
-                }
-              >
-                Mark failed
-              </button>
-            </div>
-          )}
+          {row.status === "pending" &&
+            financeWritable &&
+            row.provider !== "matbia" && (
+              <div className="actions">
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    act({
+                      type: "payment_status",
+                      values: {
+                        payment: row.id,
+                        new_status: "processed",
+                        dated: today(),
+                      },
+                    })
+                  }
+                >
+                  Confirm externally received payment
+                </button>
+                <button
+                  className="secondary"
+                  disabled={busy}
+                  onClick={() =>
+                    act({
+                      type: "payment_status",
+                      values: {
+                        payment: row.id,
+                        new_status: "failed",
+                        dated: today(),
+                      },
+                    })
+                  }
+                >
+                  Mark failed
+                </button>
+              </div>
+            )}
           {row.status === "voided" && (
             <div className="notice">
               <strong>VOIDED CASH PAYMENT</strong>
@@ -921,6 +923,36 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                 Void cash payment
               </button>
             )}
+          {row.provider === "matbia" && (
+            <p>
+              Provider: Matbia
+              {row.environment === "simulation" ? " · sample simulation" : ""}
+            </p>
+          )}
+          {row.status === "pending" && row.provider === "matbia" && (
+            <div className="notice">
+              <p>
+                Matbia payment needs confirmation. Do not submit another payment
+                to retry this attempt.
+              </p>
+              <button
+                className="secondary"
+                onClick={() => {
+                  setDetail(null);
+                  setForm({
+                    kind: "payment",
+                    preset: {
+                      donor_id: row.donor_id,
+                      amount_minor: row.amount_minor,
+                      method: "charity_card",
+                    },
+                  });
+                }}
+              >
+                Review Matbia attempt
+              </button>
+            </div>
+          )}
           <h3>Pledge allocations</h3>
           {allocations.map((a) => {
             const pledge = t.pledges.find((p) => p.id === a.pledge_id);

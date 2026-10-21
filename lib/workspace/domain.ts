@@ -54,6 +54,8 @@ export type Command = {
   type:
     | "insert"
     | "cash_void"
+    | "matbia_demo_prepare"
+    | "matbia_demo_finish"
     | "payment"
     | "donation_payment"
     | "donation_edit"
@@ -380,6 +382,10 @@ export function applyCommand(
   };
   switch (command.type) {
     case "payment_status": {
+      if (find("payments", v.payment).matbia_intent)
+        throw new Error(
+          "Use the Matbia simulation controls to resolve this test attempt.",
+        );
       const payment = find("payments", v.payment),
         date = dateValue(v.dated);
       if (
@@ -774,6 +780,117 @@ export function applyCommand(
       );
       break;
     }
+    case "matbia_demo_prepare": {
+      const existing = tables.payments.find(
+        (p) => p.idempotency_key === v.idempotency_key,
+      );
+      if (existing) {
+        if (JSON.stringify(existing.matbia_intent) !== JSON.stringify(v))
+          throw new Error("Attempt key reused for different payment");
+        break;
+      }
+      find("donors", v.donor_id);
+      find("campaigns", v.campaign_id);
+      if (
+        tables.payments.some(
+          (p) =>
+            p.donor_id === v.donor_id &&
+            p.matbia_intent &&
+            ["sending", "unknown"].includes(String(p.matbia_state)),
+        )
+      )
+        throw new Error("Previous Matbia simulation needs review");
+      if (!Array.isArray(v.allocations))
+        throw new Error("Allocation list required");
+      if (
+        !v.allocations.length &&
+        !v.credit_confirmed &&
+        tables.pledges.some(
+          (p) => p.donor_id === v.donor_id && balance(data, p) > 0,
+        )
+      )
+        throw new Error("Confirm leaving payment unapplied");
+      let total = 0;
+      const perPledge = new Map<string, number>();
+      for (const a of v.allocations as {
+        pledge_id: string;
+        amount_minor: number;
+      }[]) {
+        const pl = find("pledges", a.pledge_id);
+        if (
+          pl.donor_id !== v.donor_id ||
+          pl.voided_at ||
+          !Number.isSafeInteger(a.amount_minor) ||
+          a.amount_minor < 1
+        )
+          throw new Error("Invalid allocation");
+        const n = (perPledge.get(pl.id) ?? 0) + a.amount_minor;
+        perPledge.set(pl.id, n);
+        if (n > balance(data, pl) - scheduled(data, pl.id))
+          throw new Error("Allocation exceeds available balance");
+        total += a.amount_minor;
+      }
+      if (total > Number(v.amount_minor))
+        throw new Error("Allocations exceed payment");
+      const p = payment({
+        ...v,
+        method: "charity_card",
+        status: "pending",
+        allocations: [],
+      });
+      p.matbia_intent = structuredClone(v);
+      p.matbia_state = "sending";
+      p.provider = "matbia";
+      p.environment = "simulation";
+      break;
+    }
+    case "matbia_demo_finish": {
+      const p = tables.payments.find(
+        (p) => p.idempotency_key === v.request_key && p.matbia_intent,
+      );
+      if (!p) throw new Error("Test attempt not found");
+      if (["approved", "declined"].includes(String(p.matbia_state))) break;
+      if (!["approved", "declined", "unknown"].includes(String(v.outcome)))
+        throw new Error("Invalid test outcome");
+      const intent = p.matbia_intent as Record<string, unknown>;
+      p.matbia_state = v.outcome;
+      if (v.outcome === "approved") {
+        p.status = "processed";
+        p.reference = `MATBIA-SIM-${String(v.request_key).slice(0, 8)}`;
+        postLedger(
+          data,
+          `payment:${p.id}`,
+          String(p.paid_on),
+          "Simulated Matbia payment",
+          "payment",
+          [
+            {
+              account_id: accountId(data, "1050"),
+              debit_minor: Number(p.amount_minor),
+            },
+            {
+              account_id: accountId(data, "2100"),
+              credit_minor: Number(p.amount_minor),
+            },
+          ],
+        );
+        const backup = structuredClone({
+          allocations: tables.payment_allocations,
+          entries: tables.journal_entries,
+          lines: tables.journal_lines,
+        });
+        try {
+          allocate(p, intent.allocations);
+        } catch {
+          tables.payment_allocations = backup.allocations;
+          tables.journal_entries = backup.entries;
+          tables.journal_lines = backup.lines;
+          p.allocation_review = true;
+        }
+      } else if (v.outcome === "declined") p.status = "failed";
+      audit(p.donor_id, "payment", `Matbia simulation: ${v.outcome}`);
+      break;
+    }
     case "donation_payment": {
       find("campaigns", v.campaign_id);
       for (const [key, table] of [
@@ -972,6 +1089,7 @@ export function applyCommand(
           number: tables.receipts.length + 1,
           language: d.receipt_language ?? "en",
           snapshot: {
+            provider: p.provider ?? "manual",
             description:
               p.description ||
               tables.payment_allocations
