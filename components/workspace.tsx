@@ -64,6 +64,7 @@ import { pageTitles, tableView } from "@/lib/workspace/views";
 import { VoidCashForm } from "./void-cash-form";
 import { DonorSavedCards } from "./donor-saved-cards";
 import { RowMenu } from "./row-menu";
+import { PlaidSandbox } from "./plaid-sandbox";
 import { TransactionWizard } from "./transaction-wizard";
 import { DonationForm } from "./donation-form";
 import { DonationEdit } from "./donation-edit";
@@ -1320,9 +1321,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
     >
       <aside className="app-sidebar">
         <Link className="app-brand" href="/">
-          <span className="app-brand-mark">
-            F
-          </span>
+          <span className="app-brand-mark">F</span>
           <span>
             Fundora<small>DONORS & ACCOUNTING</small>
           </span>
@@ -1655,6 +1654,15 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                     )}
                 </div>
               </div>
+              {page === "bank" &&
+                ["owner", "admin", "accountant", "viewer"].includes(
+                  data.role,
+                ) && (
+                  <PlaidSandbox
+                    organization={data.organization.id}
+                    demo={demo}
+                  />
+                )}
               {adminPages.includes(page) &&
               !["owner", "admin"].includes(data.role) ? (
                 <p className="notice">
@@ -2006,10 +2014,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             </>
           )}
           <footer className="app-footer">
-            <span>
-              F
-              Fundora
-            </span>
+            <span>F Fundora</span>
             <span>Built for the work that brings people together.</span>
             <span>
               US · USD · {demo ? "Sample workspace" : "Live workspace"}

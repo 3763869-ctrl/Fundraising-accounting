@@ -39,3 +39,5 @@ The `fundraising/` Python app and `tests/test_foundation.py` are retained from t
 Matbia charity-card setup and sandbox separation: see [MATBIA_SETUP.md](MATBIA_SETUP.md). Live Matbia processing remains disabled pending provider activation.
 
 The global **New Transaction** button provides a donor → amount → payment-type wizard with anonymous donations, pledge campaign preservation, a default synagogue donation campaign, and optional donor credit. See [DONATIONS_WORKSPACE.md](DONATIONS_WORKSPACE.md) for accounting and payment-provider behavior.
+
+Plaid Sandbox supports an isolated simulated Chase transaction feed under Accounting → Bank Feed. See [PLAID_SETUP.md](PLAID_SETUP.md). Production bank linking remains disabled.

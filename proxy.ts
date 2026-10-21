@@ -34,5 +34,6 @@ export const config = {
     "/settings/:path*",
     "/api/sola/:path*",
     "/api/matbia/:path*",
+    "/api/plaid/:path*",
   ],
 };
