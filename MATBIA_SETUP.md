@@ -12,7 +12,7 @@ No production Matbia credential or organization handle was copied from chat/scre
 - `MATBIA_ORG_USER_HANDLE`: the organization's Matbia profile API key. A separate recipient identifier, not the authorization token. Sensitive/Production setting only.
 - `MATBIA_OWNER_EMAIL`: confirmed application owner allowed to connect the merchant and submit payments. Falls back to the already configured `SOLA_OWNER_EMAIL` if omitted.
 - `MATBIA_LIVE_PAYMENTS_ENABLED=false`: keep false until provider setup and owner-operated validation are ready.
-- `MATBIA_DIRECT_ENTRY_APPROVED=false`: require Matbia's confirmation of the documented direct card-entry approach before exposing card inputs. No Matbia hosted-field or tokenization contract has been supplied.
+- `MATBIA_DIRECT_ENTRY_ENABLED=false`: explicit operator choice to enable the app’s card-number/expiration form using Matbia’s documented Charge API. The owner authorized this approach after receiving the production token. This setting does not claim Matbia has reviewed the UI or supplies hosted/tokenized fields. The former `MATBIA_DIRECT_ENTRY_APPROVED` variable is obsolete.
 - `MATBIA_MAX_CHARGE_MINOR=10000`: initial $100 server-enforced limit.
 - Existing server-only Supabase credentials support binding and finalization. Matbia does not reuse Sola's merchant API key, iFields key, tokens or card vault.
 
@@ -40,6 +40,12 @@ The cloud workspace's proxy blocks Matbia hosts; Vercel's build environment can 
 
 ## Provider handoff
 
-Request the production validation token after sandbox verification, and ask Matbia to confirm the approved card-entry handling for the documented cardNum API. Enter both production credentials directly into secure Vercel settings. Confirm the organization, configure the gates deliberately, connect its merchant binding, and have the owner submit the first small live payment. Do not use production cards in sandbox tests or create a schedule as a setup check.
+The owner supplied the production validation token and organization profile key directly in secure Vercel settings and authorized the documented cardNum/exp form. Activation connects the existing verified Cong Morshu owner/organization, enables direct entry and live processing, and preserves the $100 cap. The owner will enter a real card and submit the first payment. Do not use production cards in sandbox tests or create a schedule as a setup check.
 
 Void/refund, recurring schedules, saved Matbia cards, automatic webhook/settlement processing and terminal support remain separate work. The presence of those endpoints in supplied documentation does not authorize calling them.
+
+## Entry and activation checks
+
+The compact live form formats pasted card numbers in groups and expiration as MM/YY, validates the documented prefix/length and expiration locally, and submits only normalized digits. These checks do not prove card funding or availability. A show/hide control is transient, and card/expiration values never enter React state, browser storage, receipts, or logs. Only the request UUID persists. Pending attempts can be restored from database payment IDs after a session is lost; failed network responses continue to block retries.
+
+`MATBIA_VERIFY_CONFIGURATION=1 npm run build` performs a read-only activation preflight against private deployment settings, verified owner, and merchant binding. It calls no Matbia endpoint and creates no payment. Mock browser tests cover formatting, expiration errors, single submission, browser-storage isolation, interrupted responses, and restoring a prior attempt without session storage. Ordinary builds skip the preflight.

@@ -6,7 +6,7 @@
     "test": "node --test tests/*.test.mjs",
     "test:e2e": "playwright test",
     "dev": "next dev --hostname 127.0.0.1",
-    "build": "node scripts/check-sola-assets.mjs && node scripts/check-matbia-sandbox.mjs && node scripts/check-plaid-sandbox.mjs && next build",
+    "build": "node scripts/check-sola-assets.mjs && node scripts/check-matbia-sandbox.mjs && node scripts/check-matbia-config.mjs && node scripts/check-plaid-sandbox.mjs && next build",
     "start": "next start --hostname 127.0.0.1",
     "typecheck": "tsc --noEmit"
   },

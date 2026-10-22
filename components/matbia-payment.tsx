@@ -1,6 +1,20 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import {
+  CreditCard,
+  LockKeyhole,
+  Eye,
+  EyeOff,
+  CircleCheck,
+} from "lucide-react";
+import {
+  matbiaDigits,
+  formatMatbiaCard,
+  formatMatbiaExpiry,
+  validMatbiaCard,
+  validMatbiaExpiry,
+} from "@/lib/matbia/card";
+import {
   cents,
   today,
   type WorkspaceData,
@@ -224,13 +238,18 @@ function MatbiaLive({
     [consent, setConsent] = useState(false),
     [stage, setStage] = useState("checking"),
     [result, setResult] = useState<Result | null>(null),
-    [key, setKey] = useState("");
+    [key, setKey] = useState(""),
+    [cardState, setCardState] = useState("empty"),
+    [expiryState, setExpiryState] = useState("empty"),
+    [showNumber, setShowNumber] = useState(false),
+    [connecting, setConnecting] = useState(false);
   const number = useRef<HTMLInputElement>(null),
     expiry = useRef<HTMLInputElement>(null),
     pending = useRef(false),
-    alive = useRef(true);
+    alive = useRef(true),
+    generation = useRef(0);
   const storageKey = `cedar-olive-matbia-attempt-${data.organization.id}`;
-  const check = async (requestKey: string) => {
+  const check = async (requestKey: string, run = generation.current) => {
     setStage("checking");
     try {
       const r = await fetch(
@@ -239,11 +258,11 @@ function MatbiaLive({
       );
       if (!r.ok) throw new Error();
       const body = await r.json();
-      if (!alive.current) return;
+      if (!alive.current || run !== generation.current) return;
       setResult(body.state === "not_started" ? null : body);
       setStage(body.state === "not_started" ? "entry" : "result");
     } catch {
-      if (alive.current) {
+      if (alive.current && run === generation.current) {
         setResult({
           state: "unknown",
           error:
@@ -255,6 +274,11 @@ function MatbiaLive({
   };
   useEffect(() => {
     alive.current = true;
+    const run = ++generation.current;
+    setCardState("empty");
+    setExpiryState("empty");
+    setShowNumber(false);
+    setConsent(false);
     setError("");
     setConfig(null);
     fetch(
@@ -263,32 +287,42 @@ function MatbiaLive({
     )
       .then(async (r) => {
         const c = await r.json();
-        if (!alive.current) return;
+        if (!alive.current || run !== generation.current) return;
         setConfig(c);
         if (c.enabled) {
           try {
-            const saved = sessionStorage.getItem(storageKey),
+            const pendingAttempt = data.tables.payments.find(
+              (p) =>
+                p.provider === "matbia" &&
+                p.status === "pending" &&
+                p.donor_id === donor,
+            );
+            const saved =
+                typeof pendingAttempt?.idempotency_key === "string"
+                  ? pendingAttempt.idempotency_key
+                  : sessionStorage.getItem(storageKey),
               requestKey =
                 saved && /^[a-f0-9-]{36}$/i.test(saved)
                   ? saved
                   : crypto.randomUUID();
             sessionStorage.setItem(storageKey, requestKey);
             setKey(requestKey);
-            void check(requestKey);
+            void check(requestKey, run);
           } catch {
             setError("Enable session storage before processing payments.");
           }
         }
       })
       .catch(() => {
-        if (alive.current) setError("Matbia setup could not be checked.");
+        if (alive.current && run === generation.current)
+          setError("Matbia setup could not be checked.");
       });
     return () => {
       alive.current = false;
       if (number.current) number.current.value = "";
       if (expiry.current) expiry.current.value = "";
     };
-  }, [data.organization.id, version]);
+  }, [data.organization.id, donor, version]);
   if (error)
     return (
       <section className="matbia-panel">
@@ -321,7 +355,10 @@ function MatbiaLive({
         {config.connect && (
           <button
             type="button"
+            disabled={connecting}
             onClick={async () => {
+              if (connecting) return;
+              setConnecting(true);
               try {
                 const r = await fetch("/api/matbia/merchant", {
                   method: "POST",
@@ -332,10 +369,12 @@ function MatbiaLive({
                 setVersion(version + 1);
               } catch {
                 setError("Matbia could not be connected to this organization.");
+              } finally {
+                setConnecting(false);
               }
             }}
           >
-            Connect this organization to Matbia
+            {connecting ? "Connecting…" : "Connect this organization to Matbia"}
           </button>
         )}
         <p>
@@ -355,6 +394,9 @@ function MatbiaLive({
       setKey(next);
       setResult(null);
       setConsent(false);
+      setCardState("empty");
+      setExpiryState("empty");
+      setShowNumber(false);
       setStage("entry");
     } catch {
       setError("Session storage is unavailable.");
@@ -373,34 +415,125 @@ function MatbiaLive({
       </p>
       {stage === "entry" && (
         <>
-          <label>
-            Matbia card number
-            <input
-              ref={number}
-              type="password"
-              inputMode="numeric"
-              autoComplete="off"
-              maxLength={16}
-              minLength={16}
-              pattern="862824[0-9]{10}"
-              required
-              aria-label="Matbia card number"
-            />
-          </label>
-          <label>
-            Matbia expiration (MMYY)
-            <input
-              ref={expiry}
-              inputMode="numeric"
-              autoComplete="off"
-              pattern="(0[1-9]|1[0-2])[0-9]{2}"
-              maxLength={4}
-              required
-            />
-          </label>
-          <p className="muted">
-            Matbia cards are not saved to donor files. No CVV is requested.
-          </p>
+          <div className="card-entry-surface matbia-entry">
+            <div className="card-entry-heading">
+              <span className="matbia-wordmark">
+                MATBIA <small>Charity card</small>
+              </span>
+              <span className="card-secure-label">
+                <LockKeyhole size={13} aria-hidden="true" /> One-time payment
+              </span>
+            </div>
+            <label htmlFor="matbia-card-number">Matbia card number</label>
+            <div
+              className={`card-number-shell ${cardState === "invalid" ? "card-number-invalid" : cardState === "ready" ? "card-number-valid" : ""}`}
+            >
+              <CreditCard size={20} aria-hidden="true" />
+              <input
+                id="matbia-card-number"
+                ref={number}
+                type={showNumber ? "text" : "password"}
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={19}
+                minLength={16}
+                pattern="[0-9 ]{16,19}"
+                placeholder="8628 24•• •••• ••••"
+                required
+                aria-label="Matbia card number"
+                aria-describedby="matbia-card-hint"
+                aria-invalid={cardState === "invalid"}
+                onInput={(e) => {
+                  const input = e.currentTarget;
+                  input.value = formatMatbiaCard(input.value);
+                  const digits = matbiaDigits(input.value);
+                  setCardState(
+                    !digits
+                      ? "empty"
+                      : digits.length < 16
+                        ? "incomplete"
+                        : validMatbiaCard(digits)
+                          ? "ready"
+                          : "invalid",
+                  );
+                }}
+              />
+              <button
+                type="button"
+                className="matbia-show-number"
+                aria-label={
+                  showNumber
+                    ? "Hide Matbia card number"
+                    : "Show Matbia card number"
+                }
+                aria-pressed={showNumber}
+                onClick={() => setShowNumber(!showNumber)}
+              >
+                {showNumber ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </div>
+            <p
+              id="matbia-card-hint"
+              className={`card-number-feedback ${cardState === "invalid" ? "invalid" : cardState === "ready" ? "valid" : ""}`}
+              role="status"
+            >
+              {cardState === "invalid" ? (
+                "Enter a 16-digit Matbia card number beginning with 862824."
+              ) : cardState === "ready" ? (
+                <>
+                  <CircleCheck size={13} aria-hidden="true" />
+                  Matbia card number entered
+                </>
+              ) : (
+                "Type or paste the 16-digit number on the card."
+              )}
+            </p>
+            <div className="matbia-expiry-row">
+              <label htmlFor="matbia-expiry">
+                Expiration (MM/YY)
+                <input
+                  id="matbia-expiry"
+                  ref={expiry}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  pattern="(0[1-9]|1[0-2])/[0-9]{2}"
+                  maxLength={5}
+                  placeholder="MM/YY"
+                  required
+                  aria-describedby="matbia-expiry-hint"
+                  aria-invalid={expiryState === "invalid"}
+                  onInput={(e) => {
+                    const input = e.currentTarget;
+                    input.value = formatMatbiaExpiry(input.value);
+                    const digits = matbiaDigits(input.value);
+                    setExpiryState(
+                      !digits
+                        ? "empty"
+                        : digits.length < 4
+                          ? "incomplete"
+                          : validMatbiaExpiry(digits)
+                            ? "ready"
+                            : "invalid",
+                    );
+                  }}
+                />
+              </label>
+              <p className="muted">
+                No CVV needed.
+                <br />
+                Card details are not saved.
+              </p>
+            </div>
+            {expiryState === "invalid" && (
+              <p
+                id="matbia-expiry-hint"
+                className="card-number-feedback invalid"
+                role="alert"
+              >
+                Check the month and year. The card must not be expired.
+              </p>
+            )}
+          </div>
           <label className="check-label">
             <input
               type="checkbox"
@@ -412,15 +545,31 @@ function MatbiaLive({
           </label>
           <button
             type="button"
-            disabled={!donor || !consent}
+            disabled={
+              !donor ||
+              !consent ||
+              cardState !== "ready" ||
+              expiryState !== "ready"
+            }
             onClick={async () => {
               if (pending.current) return;
+              if (
+                !validMatbiaCard(matbiaDigits(number.current?.value ?? "")) ||
+                !validMatbiaExpiry(matbiaDigits(expiry.current?.value ?? ""))
+              ) {
+                setResult({
+                  state: "not_started",
+                  error: "Check the Matbia number and expiration.",
+                });
+                return;
+              }
               const context = beforeSubmit();
               if (!context) return;
               let minor: number;
               try {
                 minor = cents(amount);
-                if (minor > Number(config.limit)) throw new Error();
+                if (minor < 1 || minor > Number(config.limit))
+                  throw new Error();
               } catch {
                 setResult({
                   state: "not_started",
@@ -428,8 +577,8 @@ function MatbiaLive({
                 });
                 return;
               }
-              let cardNumber = number.current?.value ?? "",
-                exp = expiry.current?.value ?? "";
+              let cardNumber = matbiaDigits(number.current?.value ?? ""),
+                exp = matbiaDigits(expiry.current?.value ?? "");
               if (number.current) number.current.value = "";
               if (expiry.current) expiry.current.value = "";
               pending.current = true;

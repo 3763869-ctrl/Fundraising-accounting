@@ -1,3 +1,5 @@
+import { validMatbiaCard, validMatbiaExpiry } from "./card.ts";
+export { validMatbiaCard, validMatbiaExpiry } from "./card.ts";
 export const MATBIA_HOSTS = {
   sandbox: "https://sandbox.api.matbia.org",
   production: "https://api.matbia.org",
@@ -13,22 +15,6 @@ export type MatbiaOutcome = {
   reference: string | null;
   providerStatus?: "Success" | "Declined" | "Failed" | "Error";
 };
-export function validMatbiaCard(card: unknown): card is string {
-  return typeof card === "string" && /^862824\d{10}$/.test(card);
-}
-export function validMatbiaExpiry(
-  exp: unknown,
-  now = new Date(),
-): exp is string {
-  if (typeof exp !== "string" || !/^(0[1-9]|1[0-2])\d{2}$/.test(exp))
-    return false;
-  const year = 2000 + Number(exp.slice(2)),
-    month = Number(exp.slice(0, 2));
-  return (
-    year > now.getUTCFullYear() ||
-    (year === now.getUTCFullYear() && month >= now.getUTCMonth() + 1)
-  );
-}
 export function interpretMatbiaResponse(body: unknown): MatbiaOutcome {
   if (!body || typeof body !== "object" || Array.isArray(body))
     return { state: "unknown", reference: null };
@@ -97,8 +83,8 @@ export async function submitMatbiaCharge(
     throw new Error("Invalid Matbia payment request.");
   if (
     input.environment === "production" &&
-    (input.token === MATBIA_SANDBOX_TOKEN ||
-      input.organizationHandle === MATBIA_SANDBOX_ORG ||
+    (input.token.trim() === MATBIA_SANDBOX_TOKEN ||
+      input.organizationHandle.trim() === MATBIA_SANDBOX_ORG ||
       Object.values(MATBIA_SANDBOX_CARDS).includes(input.cardNumber))
   )
     throw new Error("Sandbox credentials cannot be used for production.");
@@ -111,12 +97,12 @@ export async function submitMatbiaCharge(
         cache: "no-store",
         signal: AbortSignal.timeout(20000),
         headers: {
-          Authorization: input.token,
+          Authorization: input.token.trim(),
           Accept: "application/json",
           "Content-Type": "application/json-patch+json",
         },
         body: JSON.stringify({
-          orgUserHandle: input.organizationHandle,
+          orgUserHandle: input.organizationHandle.trim(),
           cardNum: input.cardNumber,
           exp: input.expiry,
           amount: Number((input.amountMinor / 100).toFixed(2)),

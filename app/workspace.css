@@ -2721,3 +2721,92 @@ button:disabled {
   align-items: center;
   gap: 6px;
 }
+
+.matbia-entry .matbia-wordmark {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #7655a2;
+}
+.matbia-wordmark small {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.matbia-entry label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #625a71;
+  margin-bottom: 6px;
+}
+.matbia-entry .card-number-shell {
+  padding: 0 10px;
+  gap: 8px;
+}
+.matbia-entry .card-number-shell input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  height: 42px;
+  margin: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  font-size: 16px;
+  padding: 0 4px;
+  letter-spacing: 1px;
+}
+.matbia-entry .matbia-show-number {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px;
+  margin: 0;
+  background: transparent;
+  color: #79688c;
+  flex: none;
+}
+.matbia-expiry-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 14px;
+}
+.matbia-expiry-row label {
+  max-width: 145px;
+  margin: 0;
+}
+.matbia-expiry-row input {
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin-top: 6px;
+  border: 1px solid #d5cede;
+  border-bottom: 2px solid #9b7dce;
+  border-radius: 7px;
+  background: white;
+  font-size: 16px;
+  padding: 0 12px;
+}
+.matbia-expiry-row p {
+  margin-top: 18px;
+  font-size: 12px;
+}
+.matbia-entry input[aria-invalid="true"] {
+  border-color: #bc4949;
+}
+.matbia-panel .check-label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 14px 0;
+}
+.matbia-panel .check-label input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: none;
+}

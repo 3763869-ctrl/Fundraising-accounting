@@ -9,17 +9,17 @@ export const matbiaLimit = () => {
 export function matbiaMissing() {
   const missing: string[] = [];
   if (
-    !process.env.MATBIA_API_TOKEN ||
-    process.env.MATBIA_API_TOKEN === MATBIA_SANDBOX_TOKEN
+    !process.env.MATBIA_API_TOKEN?.trim() ||
+    process.env.MATBIA_API_TOKEN.trim() === MATBIA_SANDBOX_TOKEN
   )
     missing.push("Production validation token");
   if (
-    !process.env.MATBIA_ORG_USER_HANDLE ||
-    process.env.MATBIA_ORG_USER_HANDLE === MATBIA_SANDBOX_ORG
+    !process.env.MATBIA_ORG_USER_HANDLE?.trim() ||
+    process.env.MATBIA_ORG_USER_HANDLE.trim() === MATBIA_SANDBOX_ORG
   )
     missing.push("Organization profile API key");
-  if (process.env.MATBIA_DIRECT_ENTRY_APPROVED !== "true")
-    missing.push("Matbia-approved card entry");
+  if (process.env.MATBIA_DIRECT_ENTRY_ENABLED !== "true")
+    missing.push("Direct card entry enabled");
   if (process.env.MATBIA_LIVE_PAYMENTS_ENABLED !== "true")
     missing.push("Live processing enabled");
   if (
